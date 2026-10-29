@@ -2045,7 +2045,7 @@ static void initialize(void) {
     unsigned char random[32];
     random_bytes(random, 32);
     Buf vault = {0};
-    put(&vault, "{\"token\":\"mr_");
+    put(&vault, "{\"token\":\"brokie_");
     for (int i = 0; i < 32; i++) fmt(&vault, "%02x", random[i]);
     put(&vault, "\",\"keys\":{}}");
     if (!vault_write(&vault, 1)) die("cannot create vault");

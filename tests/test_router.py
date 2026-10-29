@@ -199,7 +199,7 @@ def main():
         check('from-scratch setup', len(cfg['keys']) == 1 and len(cfg['models']) == 1)
         blob = (Path(tmp) / 'vault.bin').read_bytes()
         check('credentials encrypted on disk', b'fixture-provider-secret' not in blob and 'fixture-provider-secret' not in json.dumps(cfg))
-        child = cli('run', 'python3', 'fastest', '-c', 'import os,json;print(json.dumps({"model":os.environ["OPENAI_MODEL"],"base":os.environ["OPENAI_BASE_URL"],"has_key":bool(os.environ["OPENAI_API_KEY"])}))')
+        child = cli('run', 'python3', 'fastest', '-c', 'import os,json,re;print(json.dumps({"model":os.environ["OPENAI_MODEL"],"base":os.environ["OPENAI_BASE_URL"],"has_key":bool(re.fullmatch(r"brokie_[0-9a-f]{64}",os.environ["OPENAI_API_KEY"]))}))')
         info = json.loads(child.stdout)
         check('OpenAI client launch and argument forwarding', info['model'] == 'auto:fastest' and info['has_key'] and info['base'].endswith('/v1'))
         original = (Path(tmp) / 'vault.bin').read_bytes()
