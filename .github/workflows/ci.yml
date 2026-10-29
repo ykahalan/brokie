@@ -1,0 +1,31 @@
+name: Build and protocol checks
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: read
+
+jobs:
+  portable:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libcurl4-openssl-dev libssl-dev
+      - name: macOS build dependencies
+        if: runner.os == 'macOS'
+        run: brew install pkg-config curl openssl@3
+      - run: sh build.sh
+      - name: Offline protocol and fresh-setup checks
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install cryptography
+          .venv/bin/python tests/test_router.py

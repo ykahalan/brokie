@@ -1,0 +1,12 @@
+brokie
+state/
+vault.bin
+stats.json
+catalog.json
+config.json
+*.log
+*.dpapi
+.venv/
+__pycache__/
+*.pyc
+brokie-sanitized
