@@ -29,8 +29,8 @@ brew install pkg-config curl openssl@3
 sh build.sh
 ```
 
-The included Linux executable was built and tested in this machine's Ubuntu WSL distribution.
-Compile the source on other systems. macOS has not been tested on an actual Mac.
+Compile from source on each platform. Linux/WSL has been verified locally;
+the included GitHub Actions workflow also builds and checks macOS.
 
 ## Start from scratch
 
@@ -68,8 +68,8 @@ For example, a Python OpenAI client can use `model=os.environ['OPENAI_MODEL']`.
 Claude Code receives its base URL, authentication token, model and subagent model aliases.
 
 The endpoint is loopback-only. With WSL, these URLs refer to **WSL's** localhost.
-Native Windows clients require working Windows/WSL localhost forwarding; it was unavailable
-on this machine during verification. The included local launcher runs Claude Code inside WSL.
+Native Windows clients require working Windows/WSL localhost forwarding.
+Run Claude Code inside WSL when localhost forwarding is unavailable.
 
 ## Routing
 
