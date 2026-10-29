@@ -84,11 +84,11 @@ def request(p, path, body=None, auth=True):
     c.close()
     return result
 
-def vault(folder):
+def vault(folder, secrets=None):
     password = 'generated-fixture-password-123'
     salt, iv = os.urandom(16), os.urandom(12)
     key = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 600000, 32)
-    plain = json.dumps({'token': 'test_gateway', 'keys': {'1': 'test_provider'}}).encode()
+    plain = json.dumps({'token': 'test_gateway', 'keys': secrets or {'1': 'test_provider'}}).encode()
     cipher = AESGCM(key).encrypt(iv, plain, None)
     (folder / 'vault.bin').write_bytes(b'MRP1' + salt + iv + cipher[-16:] + cipher[:-16])
     return password

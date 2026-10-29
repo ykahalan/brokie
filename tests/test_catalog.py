@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -15,6 +16,9 @@ with tempfile.TemporaryDirectory(prefix='brokie-catalog-') as tmp:
     sync = run('sync')
     config = json.loads((Path(tmp) / 'config.json').read_text())
     catalog = json.loads((Path(tmp) / 'catalog.json').read_text())
+    documented = set(re.findall(r'^\| `([^`]+)`', (ROOT / 'PROVIDERS.md').read_text(encoding='utf-8'), re.M))
+    missing = {p['id'] for p in catalog['platforms']} - documented
+    assert not missing, f'Undocumented catalog providers: {sorted(missing)}'
     assert config['catalog_version'] == catalog['version']
     assert any(m['provider'] == 'local' and m['model'] == 'my-model' for m in config['models'])
     remote = next(m for m in config['models'] if m.get('source') == 'catalog')
@@ -23,4 +27,4 @@ with tempfile.TemporaryDirectory(prefix='brokie-catalog-') as tmp:
     run('sync')
     config2 = json.loads((Path(tmp) / 'config.json').read_text())
     assert not next(m for m in config2['models'] if m['id'] == remote['id'])['enabled']
-    print(json.dumps({'signature_verified': True, 'catalog_version': catalog['version'], 'catalog_tier': catalog['tier'], 'models': len(config2['models']), 'user_model_preserved': True, 'local_disable_preserved': True}))
+    print(json.dumps({'signature_verified': True, 'catalog_version': catalog['version'], 'catalog_tier': catalog['tier'], 'models': len(config2['models']), 'all_catalog_providers_documented': True, 'user_model_preserved': True, 'local_disable_preserved': True}))
