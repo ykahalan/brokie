@@ -158,7 +158,15 @@ Sync preserves local keys, profiles, disabled entries, and models marked `source
 models missing from the new feed are removed. To hold a catalog field locally, add an `overrides`
 array listing any of `tools`, `vision`, `context`, `rank`, `rpm`, `rpd`, `tpm`, `tpd` to that model.
 Use `enabled:false` to keep a catalog model disabled across syncs; simply deleting it allows it to return.
-Restart a running server after syncing. Sync is an explicit command, not a background scheduler.
+The server checks the catalog at startup and every hour, automatically applying verified updates
+after active requests finish. Downloads run outside request handling. Invalid signatures, older
+versions, network failures, and malformed updates leave the working catalog intact. Failed
+refreshes retry within five minutes. `sync` forces a refresh on disk; a running server applies
+its own background refresh without restarting. Restart after manual edits to keys/settings.
+
+Set `"refresh_seconds":3600` in `config.json` to change the interval; zero disables automatic
+catalog refresh. `BROKIE_OFFLINE=1` disables all metadata downloads and key probes, including
+explicit checks/sync. These settings take effect on server restart.
 
 Once populated, local configuration works offline from the catalog host. You can maintain models
 manually and never use this feed. Inference still goes directly to your configured providers.
@@ -169,6 +177,8 @@ manually and never use this feed. Inference still goes directly to your configur
 - `vault.bin`: AES-256-GCM encrypted credentials; PBKDF2-HMAC-SHA256, 600,000 iterations, random salt/IV.
 - `stats.json`: success/speed counters, quota usage and cooldowns; no conversation text.
 - `catalog.json`: the last verified public catalog, if used.
+- `providers.json`: cached signup URLs, API bases and safe health endpoints.
+- `health.json`: cached key status, HTTP code and last-check timestamp; no secrets.
 
 The state directory and new files use owner-only permissions on POSIX filesystems.
 The vault password is required to recover the keys; the source does not persist the password.
@@ -202,8 +212,9 @@ real catalog signature verification, live OpenAI text and Anthropic tool-call re
 Claude Code prompt. GitHub Actions also passed the build and all 25 offline checks on
 Ubuntu and Apple Silicon macOS.
 
-The current offline suite adds 31 native transport, provider onboarding, and usage
-display checks to the 25 chat checks. The optional online catalog test also checks
+The local suite includes 25 chat checks, 31 native transport/provider/usage checks,
+and 28 signed-refresh, live replacement, metadata and key-health checks against mock servers.
+The optional online catalog test also checks
 that every published platform has a documented registration path.
 
 ## Credits and code provenance
@@ -237,8 +248,12 @@ from your chosen providers remain under their control.
 `brokie providers` works before initialization and never asks for a vault password.
 After `init` and `sync`, it also marks providers from the signed catalog and keys
 already added to `config.json`. `added` means configured, not authenticated or healthy.
-The catalog contains model/platform/limit metadata; signup URLs and API bases are
-bundled in Brokie. They update with Brokie releases, while `sync` refreshes availability.
+The catalog contains model/platform/limit metadata. Signup URLs and API bases also have
+bundled fallbacks. A daily GitHub job refreshes `providers.json` from FreeLLMAPI's provider
+sources; Brokie downloads this directory over HTTPS when its cache is older than 24 hours,
+checking hourly while serving. `providers`, `key add`, `check`, and `sync` also refresh it.
+Catalog signatures and provider-directory HTTPS are separate trust mechanisms. Existing
+credential URLs never change automatically; updated presets apply to newly added keys.
 All signed media/search sections are retained in `catalog.json` even though the
 automatic model selector imports chat models only.
 
@@ -296,3 +311,22 @@ not a provider billing ledger. Input estimates include a capped output reservati
 Reliability/speed counters decay; monthly token counters reset at the month boundary.
 Native calls may bill characters, seconds, credits, or tokens; their usage is not
 counted by this chat-only statistics view. Check provider dashboards for those services.
+
+## Key health
+
+`brokie check` unlocks the vault and checks enabled keys now. `brokie health` displays cached
+status without unlocking. While serving, checks run on startup and every 15 minutes;
+real requests also update status. Set `"health_seconds":900` to change this interval,
+or zero to disable automatic probes. No background completions, images, audio or searches
+are generated: probes use read-only model, account or usage endpoints with a five-second timeout.
+
+`healthy` means a real request succeeded, or the keyed probe succeeded while its anonymous
+equivalent was rejected. Public metadata endpoints stay `unverified`. Other statuses are
+`invalid` (401), `rejected` (403), `limited` (402/429), `unreachable`, `anonymous`, and
+`request-only` when no safe probe is known. Unknown/unsupported endpoints stay unverified;
+health checks cannot guarantee a model's availability, remaining quota or free eligibility.
+Invalid credentials are excluded from chat routing until a later probe confirms recovery.
+
+For custom endpoints, a key's `health_path` can override the relative GET path (default `/models`
+for chat keys). A leading `//` starts at the configured host's root; `"-"` disables probes.
+Native-only keys default to request-only unless their provider has a known safe check.

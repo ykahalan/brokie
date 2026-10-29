@@ -30,3 +30,5 @@ jobs:
           .venv/bin/python -m pip install cryptography
           .venv/bin/python tests/test_router.py
           .venv/bin/python tests/test_native.py
+          .venv/bin/python tests/test_auto.py
+          .venv/bin/python tools/update_providers.py --verify

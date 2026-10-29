@@ -2,6 +2,7 @@ brokie
 state/
 vault.bin
 stats.json
+health.json
 catalog.json
 config.json
 *.log

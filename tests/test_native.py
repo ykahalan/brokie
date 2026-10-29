@@ -45,7 +45,8 @@ def main():
         folder, gateway = Path(tmp), port()
         names = ['exa', 'parallel', 'keenable', 'brave', 'google', 'speechify', 'mock', 'aihorde', 'pinecone', 'compat']
         password = vault(folder, {str(i + 1): 'fixture-native-secret' for i in range(len(names) + 1)})
-        env = dict(os.environ, BROKIE_PASSWORD=password)
+        env = dict(os.environ, BROKIE_PASSWORD=password, BROKIE_OFFLINE='1')
+        (folder / 'providers.json').write_bytes((Path(__file__).resolve().parents[1] / 'providers.json').read_bytes())
         def cli(*args, input=None, metadata_only=False):
             child_env = dict(env)
             if metadata_only: child_env.pop('BROKIE_PASSWORD', None)
@@ -55,7 +56,7 @@ def main():
         check('provider directory before init', 'https://console.groq.com/keys' in directory)
         documented = set(re.findall(r'^\| `([^`]+)`', (Path(__file__).resolve().parents[1] / 'PROVIDERS.md').read_text(encoding='utf-8'), re.M))
         listed_ids = set(re.findall(r'^(\w+)\s+(?:added|needed|optional)\s', directory, re.M))
-        check('all provider presets match documented sources', documented == listed_ids and len(documented) == 78)
+        check('all provider presets match documented sources', documented <= listed_ids and len(documented) >= 78)
         cfg = {'port': gateway, 'keys': [
             {'id': i + 1, 'provider': name, 'url': f'http://127.0.0.1:{upstream.server_port}/api' + ('/chat/completions' if name == 'compat' else ''),
              'native': name != 'compat', 'anonymous': name == 'aihorde'} for i, name in enumerate(names)],

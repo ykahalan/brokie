@@ -1,0 +1,786 @@
+{
+  "schema": 1,
+  "updated": "2026-10-29",
+  "providers": [
+    {
+      "id": "aclide",
+      "name": "ACLIDE",
+      "url": "https://aclide.com/v1",
+      "signup": "https://aclide.com/en/dashboard/api-keys",
+      "native": true,
+      "anonymous": false,
+      "health_path": "-",
+      "note": "shared monthly credits"
+    },
+    {
+      "id": "agnes",
+      "name": "Agnes AI",
+      "url": "https://apihub.agnes-ai.com/v1",
+      "signup": "https://platform.agnes-ai.com",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "free key"
+    },
+    {
+      "id": "aihorde",
+      "name": "AI Horde",
+      "url": "https://oai.aihorde.net/v1",
+      "signup": "https://aihorde.net/register",
+      "native": true,
+      "anonymous": true,
+      "health_path": "-",
+      "note": "no key needed, slow"
+    },
+    {
+      "id": "ainative",
+      "name": "AINative Studio",
+      "url": "https://api.ainative.studio/api/v1",
+      "signup": "https://ainative.studio",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "free key"
+    },
+    {
+      "id": "aion",
+      "name": "Aion Labs",
+      "url": "https://api.aionlabs.ai/v1",
+      "signup": "https://www.aionlabs.ai",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "free key"
+    },
+    {
+      "id": "airforce",
+      "name": "Api.Airforce",
+      "url": "https://api.airforce/v1",
+      "signup": "https://api.airforce",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "daily free requests; 1 per minute"
+    },
+    {
+      "id": "anyapi",
+      "name": "AnyAPI",
+      "url": "https://api.anyapi.ai/v1",
+      "signup": "https://anyapi.ai",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "free key"
+    },
+    {
+      "id": "apinex",
+      "name": "APINex",
+      "url": "https://api.apinex.bond/v1",
+      "signup": "https://apinex.bond/keys",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "shared daily free chat and decisions"
+    },
+    {
+      "id": "bai",
+      "name": "B.AI",
+      "url": "https://api.b.ai/v1",
+      "signup": "https://b.ai",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "promotional free model"
+    },
+    {
+      "id": "bazaarlink",
+      "name": "BazaarLink",
+      "url": "https://bazaarlink.ai/api/v1",
+      "signup": "https://bazaarlink.ai",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "free key"
+    },
+    {
+      "id": "beatapi",
+      "name": "BeatAPI",
+      "url": "https://api.beatapi.io/v1",
+      "signup": "https://beatapi.io",
+      "native": true,
+      "anonymous": false,
+      "health_path": "-",
+      "note": "JEV decisions; temporary free offer"
+    },
+    {
+      "id": "blaze",
+      "name": "BlazeAPI",
+      "url": "https://api.blazeapi.org/paid/v1",
+      "signup": "https://blazeapi.org/dashboard",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "daily free tokens; Discord verification"
+    },
+    {
+      "id": "blockrun",
+      "name": "BlockRun",
+      "url": "https://api.blockrun.ai/v1",
+      "signup": "https://user.blockrun.ai/dashboard/keys",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/account",
+      "note": "zero-priced models"
+    },
+    {
+      "id": "brave",
+      "name": "Brave Search",
+      "url": "https://api.search.brave.com/res/v1",
+      "signup": "https://api-dashboard.search.brave.com",
+      "native": true,
+      "anonymous": false,
+      "health_path": "-",
+      "note": "Check current free credits and billing requirements."
+    },
+    {
+      "id": "cerebras",
+      "name": "Cerebras",
+      "url": "https://api.cerebras.ai/v1",
+      "signup": "https://cloud.cerebras.ai",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "Check current free-plan eligibility."
+    },
+    {
+      "id": "clod",
+      "name": "CLōD",
+      "url": "https://api.clod.io/v1",
+      "signup": "https://newapp.clod.io",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "shared daily free requests"
+    },
+    {
+      "id": "cloudflare",
+      "name": "Cloudflare Workers AI",
+      "url": "https://api.cloudflare.com/client/v4/accounts/YOUR_ACCOUNT_ID/ai/v1",
+      "signup": "https://dash.cloudflare.com",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "Check current free-plan eligibility."
+    },
+    {
+      "id": "cohere",
+      "name": "Cohere",
+      "url": "https://api.cohere.ai/compatibility/v1",
+      "signup": "https://dashboard.cohere.com/api-keys",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "Check current free-plan eligibility."
+    },
+    {
+      "id": "dreamprompting",
+      "name": "DreamPrompting",
+      "url": "https://dreamprompting.com/api/v1",
+      "signup": "https://dreamprompting.com",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "rolling 24h free tokens and requests"
+    },
+    {
+      "id": "electronhub",
+      "name": "ElectronHub",
+      "url": "https://api.electronhub.ai/v1",
+      "signup": "https://app.electronhub.ai",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/user/me",
+      "note": "shared weekly credits"
+    },
+    {
+      "id": "exa",
+      "name": "Exa",
+      "url": "https://api.exa.ai",
+      "signup": "https://dashboard.exa.ai/api-keys",
+      "native": true,
+      "anonymous": false,
+      "health_path": "-",
+      "note": "Check current free credits and billing requirements."
+    },
+    {
+      "id": "experiential",
+      "name": "Experiential Labs",
+      "url": "https://api.experientiallabs.ai/v1",
+      "signup": "https://platform.experientiallabs.ai",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "shared monthly credits"
+    },
+    {
+      "id": "firecrawl",
+      "name": "Firecrawl",
+      "url": "https://api.firecrawl.dev/v2",
+      "signup": "https://www.firecrawl.dev/app/api-keys",
+      "native": true,
+      "anonymous": false,
+      "health_path": "/team/credit-usage",
+      "note": "Check current free credits and billing requirements."
+    },
+    {
+      "id": "freeai",
+      "name": "Free.ai",
+      "url": "https://api.free.ai",
+      "signup": "https://free.ai/account/#api-keys",
+      "native": true,
+      "anonymous": false,
+      "health_path": "-",
+      "note": "shared daily free TTS tokens"
+    },
+    {
+      "id": "gizmo",
+      "name": "Gizmo",
+      "url": "https://api.gizmoplatforms.com/api/v1",
+      "signup": "https://gizmoplatforms.com/developers",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "monthly free-model requests"
+    },
+    {
+      "id": "google",
+      "name": "Google AI Studio",
+      "url": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "signup": "https://aistudio.google.com/apikey",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "Check current free-plan eligibility."
+    },
+    {
+      "id": "groq",
+      "name": "Groq",
+      "url": "https://api.groq.com/openai/v1",
+      "signup": "https://console.groq.com/keys",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "Check current free-plan eligibility."
+    },
+    {
+      "id": "huggingface",
+      "name": "HuggingFace Router",
+      "url": "https://router.huggingface.co/v1",
+      "signup": "https://huggingface.co/settings/tokens",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "Check current free-plan eligibility."
+    },
+    {
+      "id": "inferbase",
+      "name": "Inferbase",
+      "url": "https://api.inferbase.ai/v1",
+      "signup": "https://inferbase.ai",
+      "native": false,
+      "anonymous": false,
+      "health_path": "//api/v1/inference/credits",
+      "note": "shared monthly and daily allowance"
+    },
+    {
+      "id": "iteracompute",
+      "name": "IteraCompute",
+      "url": "https://api.iteracompute.com/v1",
+      "signup": "https://iteracompute.com/free/",
+      "native": false,
+      "anonymous": false,
+      "health_path": "-",
+      "note": "30M free tokens / month, shared"
+    },
+    {
+      "id": "keenable",
+      "name": "Keenable",
+      "url": "https://api.keenable.ai/v1",
+      "signup": "https://app.keenable.ai",
+      "native": true,
+      "anonymous": true,
+      "health_path": "-",
+      "note": "Check current free credits and billing requirements."
+    },
+    {
+      "id": "kenari",
+      "name": "Kenari",
+      "url": "https://kenari.id/v1",
+      "signup": "https://kenari.id",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/account/balance",
+      "note": "shared daily free chat and images"
+    },
+    {
+      "id": "kilo",
+      "name": "Kilo Gateway",
+      "url": "https://api.kilo.ai/api/gateway/v1",
+      "signup": "https://app.kilo.ai",
+      "native": false,
+      "anonymous": true,
+      "health_path": "/models",
+      "note": "no key needed"
+    },
+    {
+      "id": "kiosapi",
+      "name": "KiosAPI",
+      "url": "https://api.kiosapi.id/v1",
+      "signup": "https://kiosapi.id/dashboard/keys",
+      "native": false,
+      "anonymous": false,
+      "health_path": "-",
+      "note": "shared daily free chat"
+    },
+    {
+      "id": "linkup",
+      "name": "Linkup",
+      "url": "https://api.linkup.so/v1",
+      "signup": "https://app.linkup.so",
+      "native": true,
+      "anonymous": false,
+      "health_path": "/credits/balance",
+      "note": "Check current free credits and billing requirements."
+    },
+    {
+      "id": "llm7",
+      "name": "LLM7",
+      "url": "https://api.llm7.io/v1",
+      "signup": "https://llm7.io",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "anon ok"
+    },
+    {
+      "id": "llmtr",
+      "name": "LLMTR",
+      "url": "https://llmtr.com/v1",
+      "signup": "https://llmtr.com",
+      "native": false,
+      "anonymous": false,
+      "health_path": "-",
+      "note": "daily free-model quotas"
+    },
+    {
+      "id": "logfare",
+      "name": "Logfare",
+      "url": "https://logfare.ai/v1",
+      "signup": "https://logfare.ai",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "fair-use free models"
+    },
+    {
+      "id": "longcat",
+      "name": "LongCat",
+      "url": "https://api.longcat.chat/openai/v1",
+      "signup": "https://longcat.chat/platform",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "free daily, email signup ok"
+    },
+    {
+      "id": "lucidity",
+      "name": "Lucidity Composite",
+      "url": "https://composite.lucidity.sh/v1",
+      "signup": "https://composite.lucidity.sh",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "daily free-model requests"
+    },
+    {
+      "id": "mistral",
+      "name": "Mistral",
+      "url": "https://api.mistral.ai/v1",
+      "signup": "https://console.mistral.ai/api-keys/",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "Check current free-plan eligibility."
+    },
+    {
+      "id": "modelscope",
+      "name": "ModelScope",
+      "url": "https://api-inference.modelscope.cn/v1",
+      "signup": "https://modelscope.cn/my/myaccesstoken",
+      "native": false,
+      "anonymous": false,
+      "health_path": "-",
+      "note": "free key, needs Aliyun cn binding"
+    },
+    {
+      "id": "moondream",
+      "name": "Moondream",
+      "url": "https://api.moondream.ai/v1",
+      "signup": "https://moondream.ai/c/cloud/api-keys",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "$5 shared monthly credits"
+    },
+    {
+      "id": "nara",
+      "name": "NaraRouter",
+      "url": "https://router.bynara.id/v1",
+      "signup": "https://router.bynara.id",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "free key"
+    },
+    {
+      "id": "navy",
+      "name": "NavyAI",
+      "url": "https://api.navy/v1",
+      "signup": "https://api.navy",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "free key"
+    },
+    {
+      "id": "nvidia",
+      "name": "NVIDIA NIM",
+      "url": "https://integrate.api.nvidia.com/v1",
+      "signup": "https://build.nvidia.com/settings/api-keys",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "Check current free-plan eligibility."
+    },
+    {
+      "id": "ollama",
+      "name": "Ollama Cloud",
+      "url": "https://ollama.com/v1",
+      "signup": "https://ollama.com/settings/keys",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "Check current free-plan eligibility."
+    },
+    {
+      "id": "onomeo",
+      "name": "onomeo",
+      "url": "https://onomeo.com/v1",
+      "signup": "https://onomeo.com/dashboard",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "30 free calls / 5 hours, shared"
+    },
+    {
+      "id": "opencode",
+      "name": "OpenCode Zen",
+      "url": "https://opencode.ai/zen/v1",
+      "signup": "https://opencode.ai/auth",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "paid models only"
+    },
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "url": "https://openrouter.ai/api/v1",
+      "signup": "https://openrouter.ai/keys",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "Check current free-plan eligibility."
+    },
+    {
+      "id": "orcarouter",
+      "name": "OrcaRouter",
+      "url": "https://api.orcarouter.ai/v1",
+      "signup": "https://www.orcarouter.ai",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "free key"
+    },
+    {
+      "id": "ovh",
+      "name": "OVH AI Endpoints",
+      "url": "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
+      "signup": "https://endpoints.ai.cloud.ovh.net",
+      "native": false,
+      "anonymous": true,
+      "health_path": "/models",
+      "note": "no key needed"
+    },
+    {
+      "id": "parallel",
+      "name": "Parallel",
+      "url": "https://api.parallel.ai/v1",
+      "signup": "https://platform.parallel.ai",
+      "native": true,
+      "anonymous": false,
+      "health_path": "-",
+      "note": "Check current free credits and billing requirements."
+    },
+    {
+      "id": "pinecone",
+      "name": "Pinecone",
+      "url": "https://api.pinecone.io",
+      "signup": "https://app.pinecone.io",
+      "native": true,
+      "anonymous": false,
+      "health_path": "-",
+      "note": "Cataloged embeddings; confirm Starter allowance."
+    },
+    {
+      "id": "plugsky",
+      "name": "Plugsky",
+      "url": "https://plugsky.com/v1",
+      "signup": "https://plugsky.com/dashboard",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "free chat aliases"
+    },
+    {
+      "id": "pollinations",
+      "name": "Pollinations",
+      "url": "https://gen.pollinations.ai/v1",
+      "signup": "https://enter.pollinations.ai",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "Check current free-plan eligibility."
+    },
+    {
+      "id": "qianfan",
+      "name": "Baidu Qianfan",
+      "url": "https://qianfan.baidubce.com/v2",
+      "signup": "https://console.bce.baidu.com/qianfan/overview",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "free ERNIE, needs cn real-name"
+    },
+    {
+      "id": "radeon",
+      "name": "AMD Radeon Cloud",
+      "url": "https://developer.amd.com.cn/radeon/api/v1",
+      "signup": "https://developer.amd.com.cn/radeon/tokenfactory",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "free shared models"
+    },
+    {
+      "id": "reka",
+      "name": "Reka",
+      "url": "https://api.reka.ai/v1",
+      "signup": "https://platform.reka.ai",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "prepaid credits"
+    },
+    {
+      "id": "requesty",
+      "name": "Requesty",
+      "url": "https://router.requesty.ai/v1",
+      "signup": "https://www.requesty.ai",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "free key"
+    },
+    {
+      "id": "router9",
+      "name": "Router9",
+      "url": "https://api.router9.com/v1",
+      "signup": "https://www.router9.com",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "shared monthly credits"
+    },
+    {
+      "id": "routeway",
+      "name": "Routeway",
+      "url": "https://api.routeway.ai/v1",
+      "signup": "https://routeway.ai",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "free key"
+    },
+    {
+      "id": "sail",
+      "name": "Sail Research",
+      "url": "https://api.sailresearch.com/v1",
+      "signup": "https://app.sailresearch.com",
+      "native": true,
+      "anonymous": false,
+      "health_path": "-",
+      "note": "$5 monthly with payment method"
+    },
+    {
+      "id": "sealion",
+      "name": "SEA-LION",
+      "url": "https://api.sea-lion.ai/v1",
+      "signup": "https://sea-lion.ai",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "free key"
+    },
+    {
+      "id": "septor",
+      "name": "Septor Labs",
+      "url": "https://api.septorlabs.com/v1",
+      "signup": "https://septorlabs.com/dashboard",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "daily free-model quota"
+    },
+    {
+      "id": "serpsearch",
+      "name": "SerpSearch",
+      "url": "https://api.serpsearch.com/api/v1",
+      "signup": "https://serpsearch.com",
+      "native": true,
+      "anonymous": false,
+      "health_path": "-",
+      "note": "Check current free credits and billing requirements."
+    },
+    {
+      "id": "siliconflow",
+      "name": "SiliconFlow",
+      "url": "https://api.siliconflow.com/v1",
+      "signup": "https://siliconflow.com",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "image + TTS"
+    },
+    {
+      "id": "simplellm",
+      "name": "SimpleLLM",
+      "url": "https://api.simplellm.eu/v1",
+      "signup": "https://app.simplellm.eu",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/rate-limit",
+      "note": "shared hourly and daily free quota"
+    },
+    {
+      "id": "speechify",
+      "name": "Speechify",
+      "url": "https://api.speechify.ai/v1",
+      "signup": "https://platform.speechify.ai",
+      "native": true,
+      "anonymous": false,
+      "health_path": "/workspaces/current/entitlements",
+      "note": "monthly free TTS characters"
+    },
+    {
+      "id": "speka",
+      "name": "Speka",
+      "url": "https://speka.me/v1",
+      "signup": "https://speka.me/dashboard/keys",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "$1 shared monthly credits"
+    },
+    {
+      "id": "tavily",
+      "name": "Tavily",
+      "url": "https://api.tavily.com",
+      "signup": "https://app.tavily.com",
+      "native": true,
+      "anonymous": false,
+      "health_path": "/usage",
+      "note": "Check current free credits and billing requirements."
+    },
+    {
+      "id": "typhoon",
+      "name": "Typhoon",
+      "url": "https://api.opentyphoon.ai/v1",
+      "signup": "https://playground.opentyphoon.ai",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "free research API"
+    },
+    {
+      "id": "unorouter",
+      "name": "UnoRouter",
+      "url": "https://api.unorouter.com/v1",
+      "signup": "https://unorouter.com",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "free key"
+    },
+    {
+      "id": "volcengine",
+      "name": "Volcengine Ark",
+      "url": "https://ark.cn-beijing.volces.com/api/v3",
+      "signup": "https://console.volcengine.com/ark",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "free daily, needs cn real-name"
+    },
+    {
+      "id": "waterfall",
+      "name": "Waterfall",
+      "url": "https://api.getwaterfall.org/v1",
+      "signup": "https://getwaterfall.org",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "community free models"
+    },
+    {
+      "id": "xfyun",
+      "name": "iFlytek Spark",
+      "url": "https://spark-api-open.xf-yun.com/v1",
+      "signup": "https://console.xfyun.cn",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "free Lite, needs cn real-name"
+    },
+    {
+      "id": "xkiro",
+      "name": "xKiro",
+      "url": "https://api.xkiro.com/v1",
+      "signup": "https://xkiro.com",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/usage",
+      "note": "free key"
+    },
+    {
+      "id": "zhipu",
+      "name": "Zhipu AI",
+      "url": "https://api.z.ai/api/paas/v4",
+      "signup": "https://z.ai/manage-apikey/apikey-list",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "Z.ai"
+    }
+  ]
+}

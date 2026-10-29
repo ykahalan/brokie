@@ -110,7 +110,7 @@ def main():
             {'id': 3, 'provider': 'mock', 'model': 'vision', 'tier': 2, 'rank': 3, 'vision': True},
         ]}
         (folder / 'config.json').write_text(json.dumps(cfg))
-        env = dict(os.environ, BROKIE_PASSWORD=password)
+        env = dict(os.environ, BROKIE_PASSWORD=password, BROKIE_OFFLINE='1')
         with (folder / 'log').open('w+') as log:
             proc = subprocess.Popen([str(BINARY), '--dir', str(folder), 'serve'], env=env, stdout=log, stderr=log)
             try:
@@ -189,7 +189,7 @@ def main():
     upstream.shutdown()
     # A fresh setup uses only the shipped C executable: no migration helper.
     with tempfile.TemporaryDirectory(prefix='brokie-fresh-') as tmp:
-        env = dict(os.environ, BROKIE_PASSWORD='fresh-fixture-password-123')
+        env = dict(os.environ, BROKIE_PASSWORD='fresh-fixture-password-123', BROKIE_OFFLINE='1')
         def cli(*args, input=None, check_code=True):
             return subprocess.run([str(BINARY), '--dir', tmp, *args], env=env, input=input, capture_output=True, text=True, check=check_code)
         cli('init')

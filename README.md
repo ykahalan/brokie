@@ -39,15 +39,18 @@ In another terminal:
 ./brokie run python3 fastest my_client.py
 ./brokie list reliable
 ./brokie stats
+./brokie health
 ```
 
 Modes: `smartest`, `fastest`, `reliable`, `balanced`. API model IDs use `auto:MODE`;
 `provider/model-id` pins a model. OpenAI base URL: `http://127.0.0.1:31817/v1`.
 The launchers supply authentication and model settings automatically.
 
-[78 provider sign-up links and API bases](PROVIDERS.md), including image, audio, and search.
-Use `/native/PROVIDER/PATH` for their native APIs. `sync` retrieves the signed catalog.
-Restart the server after configuration changes. Provider quotas and charges still apply.
+[Provider sign-up links and API bases](PROVIDERS.md), including image, audio, and search.
+The server refreshes the signed model catalog hourly and checks keys every 15 minutes;
+provider setup links refresh daily. `check` checks keys now; `health` shows cached results.
+Use `/native/PROVIDER/PATH` for native APIs. Restart after editing keys/settings.
+`BROKIE_OFFLINE=1` disables background downloads and checks. Provider quotas and charges apply.
 
 [Configuration, scoring, API limits, and verification](GUIDE.md).
 

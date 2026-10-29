@@ -35,6 +35,7 @@
 #include <unistd.h>
 typedef int Sock;
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t idle = PTHREAD_COND_INITIALIZER;
 #define LOCK() pthread_mutex_lock(&mutex)
 #define UNLOCK() pthread_mutex_unlock(&mutex)
 #define close_socket close
@@ -520,8 +521,9 @@ static int vault_write(Buf *plain, int create) {
 }
 
 typedef struct {
-    int id, enabled, anonymous, native;
-    char provider[96], label[160], url[2048], secret[4096];
+    int id, enabled, anonymous, native, health, http;
+    double checked;
+    char provider[96], label[160], url[2048], secret[4096], health_path[256];
 } Key;
 typedef struct {
     int id, enabled, tools, vision, context, rank, tier, key_id, priority;
@@ -540,8 +542,51 @@ static Key keys[MAX_KEYS];
 static Model models[MAX_MODELS];
 static Stats *stats;
 static int nk, nm, port = 31817, max_attempts = 6, timeout_ms = 60000, sticky_seconds = 1800;
+static int refresh_seconds = 3600, health_seconds = 900;
 static char default_mode[32] = "smartest", auth_token[4096];
+static char catalog_license[4096];
+enum { H_UNKNOWN, H_OK, H_INVALID, H_REJECTED, H_LIMITED, H_DOWN, H_PUBLIC, H_ANONYMOUS, H_SKIP };
+static const char *health_names[] = {"unknown",     "healthy",    "invalid",   "rejected",    "limited",
+                                     "unreachable", "unverified", "anonymous", "request-only"};
 static Buf config;
+static int offline(void) { return getenv("BROKIE_OFFLINE") && !strcmp(getenv("BROKIE_OFFLINE"), "1"); }
+static double cache_age(const char *name) {
+    char path[4096];
+    struct stat info;
+    path_for(path, sizeof(path), name);
+    return stat(path, &info) ? 1e30 : fmax(0, (double)time(NULL) - info.st_mtime);
+}
+static void save_health(void) {
+    Buf b = {0};
+    put(&b, "[");
+    for (int k = 0; k < nk; k++)
+        fmt(&b, "%s{\"id\":%d,\"health\":%d,\"http\":%d,\"checked\":%.0f}", k ? "," : "", keys[k].id, keys[k].health,
+            keys[k].http, keys[k].checked);
+    put(&b, "]\n");
+    if (!write_file("health.json", b.p, b.n)) fprintf(stderr, "brokie: could not save key health\n");
+    drop(&b);
+}
+static void load_health(void) {
+    Buf b = read_file("health.json");
+    if (!b.p) return;
+    Json j = json(b.p, b.n);
+    for (int r = 0; !j.bad && j.n && j.t[0].type == '[' && r < j.t[0].n; r++) {
+        int row = at(&j, 0, r);
+        double id = fieldnum(&j, row, "id", -1), health = fieldnum(&j, row, "health", 0),
+               http = fieldnum(&j, row, "http", 0), checked = fieldnum(&j, row, "checked", 0);
+        if (!isfinite(id) || !isfinite(health) || !isfinite(http) || !isfinite(checked) || health < 0 ||
+            health > H_SKIP || http < 0 || http > 599 || checked < 0)
+            continue;
+        for (int k = 0; k < nk; k++)
+            if (keys[k].id == id) {
+                keys[k].health = (int)health;
+                keys[k].http = (int)http;
+                keys[k].checked = checked;
+            }
+    }
+    jfree(&j);
+    drop(&b);
+}
 static double now_s(void) { return (double)time(NULL); }
 static long long month_id(void) {
     time_t t = time(NULL);
@@ -629,6 +674,64 @@ static void save_state(void) {
     if (!write_file("stats.json", b.p, b.n)) fprintf(stderr, "brokie: could not save statistics\n");
     drop(&b);
 }
+static int parse_models(Json *j, Model *out, int *count) {
+    int n = 0;
+    if (j->bad || !j->n || j->t[0].type != '{') return 0;
+    char profile[160];
+    fieldstr(j, 0, "profile", profile, sizeof(profile));
+    int profiles = get(j, 0, "profiles"), chain = -1;
+    if (profile[0])
+        for (int i = 0; profiles >= 0 && i < j->t[profiles].n; i++) {
+            int r = at(j, profiles, i);
+            if (eq(j, get(j, r, "name"), profile)) chain = get(j, r, "models");
+        }
+    if (profile[0] && chain < 0) return 0;
+    int a = get(j, 0, "models");
+    if (a >= 0 && j->t[a].type != '[') return 0;
+    if (a >= 0 && j->t[a].n > MAX_MODELS) return 0;
+    for (int i = 0; a >= 0 && i < j->t[a].n; i++) {
+        int r = at(j, a, i);
+        if (j->t[r].type != '{') return 0;
+        const char *ints[] = {"id",   "enabled", "tools", "vision", "context", "rank",
+                              "tier", "key_id",  "rpm",   "rpd",    "tpm",     "tpd"};
+        for (size_t q = 0; q < sizeof(ints) / sizeof(*ints); q++) {
+            double value = fieldnum(j, r, ints[q], 0);
+            if (!isfinite(value) || value < -2147483647. || value > 2147483647.) return 0;
+        }
+        Model *m = &out[n++];
+        m->id = (int)fieldnum(j, r, "id", n);
+        m->enabled = boolean(j, get(j, r, "enabled"), 1);
+        m->tools = boolean(j, get(j, r, "tools"), 0);
+        m->vision = boolean(j, get(j, r, "vision"), 0);
+        m->context = (int)fieldnum(j, r, "context", 0);
+        m->rank = (int)fieldnum(j, r, "rank", 50);
+        m->tier = (int)fieldnum(j, r, "tier", 2);
+        m->key_id = (int)fieldnum(j, r, "key_id", 0);
+        m->budget = fieldnum(j, r, "budget", 0);
+        m->priority = i;
+        m->rpm = (int)fieldnum(j, r, "rpm", 0);
+        m->rpd = (int)fieldnum(j, r, "rpd", 0);
+        m->tpm = (int)fieldnum(j, r, "tpm", 0);
+        m->tpd = (int)fieldnum(j, r, "tpd", 0);
+        fieldstr(j, r, "provider", m->provider, sizeof(m->provider));
+        fieldstr(j, r, "model", m->name, sizeof(m->name));
+        if (m->id < 1 || !m->provider[0] || !m->name[0] || !isfinite(m->budget)) return 0;
+        for (int q = 0; q < n - 1; q++)
+            if (out[q].id == m->id) return 0;
+        if (chain >= 0) {
+            int found = 0;
+            for (int q = 0; q < j->t[chain].n; q++)
+                if ((int)number(j, at(j, chain, q), -1) == m->id) {
+                    found = 1;
+                    m->priority = q;
+                    break;
+                }
+            m->enabled &= found;
+        }
+    }
+    *count = n;
+    return 1;
+}
 static void load_config(int need_vault) {
     config = read_file("config.json");
     if (!config.p) die("run 'brokie init' first");
@@ -640,6 +743,8 @@ static void load_config(int need_vault) {
     timeout_ms = (int)fieldnum(&j, 0, "timeout_ms", 60000);
     max_attempts = (int)fieldnum(&j, 0, "max_attempts", 6);
     sticky_seconds = (int)fieldnum(&j, 0, "sticky_seconds", 1800);
+    refresh_seconds = (int)fieldnum(&j, 0, "refresh_seconds", 3600);
+    health_seconds = (int)fieldnum(&j, 0, "health_seconds", 900);
     int a = get(&j, 0, "keys");
     if (a >= 0 && j.t[a].n > MAX_KEYS) die("too many keys");
     for (int i = 0; a >= 0 && i < j.t[a].n; i++) {
@@ -652,55 +757,18 @@ static void load_config(int need_vault) {
         fieldstr(&j, r, "provider", k->provider, sizeof(k->provider));
         fieldstr(&j, r, "label", k->label, sizeof(k->label));
         fieldstr(&j, r, "url", k->url, sizeof(k->url));
+        fieldstr(&j, r, "health_path", k->health_path, sizeof(k->health_path));
     }
-    char profile[160];
-    fieldstr(&j, 0, "profile", profile, sizeof(profile));
-    int profiles = get(&j, 0, "profiles"), chain = -1;
-    if (profile[0])
-        for (int i = 0; profiles >= 0 && i < j.t[profiles].n; i++) {
-            int r = at(&j, profiles, i);
-            if (eq(&j, get(&j, r, "name"), profile)) chain = get(&j, r, "models");
-        }
-    if (profile[0] && chain < 0) die("configured profile does not exist");
-    a = get(&j, 0, "models");
-    if (a >= 0 && j.t[a].n > MAX_MODELS) die("too many models");
-    for (int i = 0; a >= 0 && i < j.t[a].n; i++) {
-        int r = at(&j, a, i);
-        Model *m = &models[nm++];
-        m->id = (int)fieldnum(&j, r, "id", nm);
-        m->enabled = boolean(&j, get(&j, r, "enabled"), 1);
-        m->tools = boolean(&j, get(&j, r, "tools"), 0);
-        m->vision = boolean(&j, get(&j, r, "vision"), 0);
-        m->context = (int)fieldnum(&j, r, "context", 0);
-        m->rank = (int)fieldnum(&j, r, "rank", 50);
-        m->tier = (int)fieldnum(&j, r, "tier", 2);
-        m->key_id = (int)fieldnum(&j, r, "key_id", 0);
-        m->budget = fieldnum(&j, r, "budget", 0);
-        m->priority = i;
-        m->rpm = (int)fieldnum(&j, r, "rpm", 0);
-        m->rpd = (int)fieldnum(&j, r, "rpd", 0);
-        m->tpm = (int)fieldnum(&j, r, "tpm", 0);
-        m->tpd = (int)fieldnum(&j, r, "tpd", 0);
-        fieldstr(&j, r, "provider", m->provider, sizeof(m->provider));
-        fieldstr(&j, r, "model", m->name, sizeof(m->name));
-        if (chain >= 0) {
-            int found = 0;
-            for (int q = 0; q < j.t[chain].n; q++)
-                if ((int)number(&j, at(&j, chain, q), -1) == m->id) {
-                    found = 1;
-                    m->priority = q;
-                    break;
-                }
-            m->enabled &= found;
-        }
-    }
+    if (!parse_models(&j, models, &nm)) die("invalid models or profile");
     jfree(&j);
+    load_health();
     if (need_vault) {
         Buf vlt = vault_read();
         if (!vlt.p) die("vault.bin is missing");
         Json vj = json(vlt.p, vlt.n);
         if (vj.bad) die("vault is invalid");
         fieldstr(&vj, 0, "token", auth_token, sizeof(auth_token));
+        fieldstr(&vj, 0, "catalog_license", catalog_license, sizeof(catalog_license));
         int ka = get(&vj, 0, "keys");
         for (int i = 0; i < nk; i++) {
             char id[32];
@@ -717,6 +785,7 @@ static void load_config(int need_vault) {
     }
     if (port < 1 || port > 65535 || timeout_ms < 1000 || timeout_ms > 600000 || max_attempts < 1 || max_attempts > 32)
         die("invalid network settings");
+    if (refresh_seconds < 0 || health_seconds < 0) die("refresh intervals must be zero or positive");
     stats = mem((size_t)(nk ? nk : 1) * (nm ? nm : 1) * sizeof(Stats));
     load_state();
 }
@@ -797,7 +866,7 @@ static int choose(const char *mode, const char *pin, int tools, int vision, int 
         int usable_keys = 0;
         for (int k = 0; k < nk; k++)
             if (!strcmp(keys[k].provider, mod->provider) && (!mod->key_id || mod->key_id == keys[k].id) &&
-                keys[k].enabled && !keys[k].native) {
+                keys[k].enabled && !keys[k].native && keys[k].health != H_INVALID) {
                 Stats *s = st(m, k);
                 decay(s, now);
                 agg.s += s->s;
@@ -815,7 +884,7 @@ static int choose(const char *mode, const char *pin, int tools, int vision, int 
         for (int k = 0; k < nk; k++) {
             Key *key = &keys[k];
             Stats *s = st(m, k);
-            if (!key->enabled || key->native || strcmp(key->provider, mod->provider) ||
+            if (!key->enabled || key->native || key->health == H_INVALID || strcmp(key->provider, mod->provider) ||
                 (mod->key_id && mod->key_id != key->id) || (!key->anonymous && !key->secret[0]) ||
                 (tried && tried[(size_t)m * nk + k]) || s->cooldown > now || s->inflight >= 2)
                 continue;
@@ -1131,7 +1200,7 @@ typedef struct {
     Buf body;
     Chunk chunk;
     void *ctx;
-    int canceled, native;
+    int canceled, native, timeout;
     const char *request_type;
     char signature[256], content_type[256];
 } Upstream;
@@ -1208,7 +1277,7 @@ static int fetch(Key *key, const char *url, const char *body, size_t n, Upstream
     curl_easy_setopt(c, CURLOPT_HTTPHEADER, h);
     curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 0L);
     curl_easy_setopt(c, CURLOPT_CONNECTTIMEOUT_MS, 10000L);
-    curl_easy_setopt(c, CURLOPT_TIMEOUT_MS, (long)timeout_ms);
+    curl_easy_setopt(c, CURLOPT_TIMEOUT_MS, (long)(u->timeout ? u->timeout : timeout_ms));
     curl_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);
     curl_easy_setopt(c, CURLOPT_USERAGENT,
                      !strcmp(key->provider, "routeway") ? "Mozilla/5.0 Brokie/0.1" : "Brokie/0.1");
@@ -1448,7 +1517,9 @@ static void free_stream(Stream *s) {
 }
 
 /* The HTTP listener is loopback-only. At most 16 worker threads hold requests. */
-static int active_clients;
+static int active_clients, updating;
+static void *automatic_refresh(void *unused);
+static int sync_catalog(int live);
 static int same_secret(const char *a, const char *b) {
     size_t an = strlen(a), bn = strlen(b);
     unsigned diff = (unsigned)(an ^ bn);
@@ -1636,11 +1707,21 @@ static void complete_request(Sock client, Json *original, int anthropic) {
         Stats *s = st(r.m, r.k);
         decay(s, now_s());
         s->inflight--;
-        double actual = input + output;
+        double actual = input + output > 0 ? input + output : success ? estimate : 0;
         s->min_tokens = fmax(0, s->min_tokens - estimate + actual);
         s->day_tokens = fmax(0, s->day_tokens - estimate + actual);
         s->month_tokens += actual;
         if (!stream.disconnected) {
+            if (success || !transport || up.status >= 500 || up.status == 401 || up.status == 403 || up.status == 429 ||
+                up.status == 402) {
+                key->health = success                                ? H_OK
+                              : up.status == 401                     ? H_INVALID
+                              : up.status == 403                     ? H_REJECTED
+                              : up.status == 429 || up.status == 402 ? H_LIMITED
+                                                                     : H_DOWN;
+                key->http = (int)up.status;
+                key->checked = now_s();
+            }
             if (success) {
                 s->s++;
                 s->out += output;
@@ -1670,6 +1751,7 @@ static void complete_request(Sock client, Json *original, int anthropic) {
             }
         }
         save_state();
+        save_health();
         UNLOCK();
         last_status = up.status == 429 ? 429 : 502;
         fprintf(stderr, "%s/%s: %s (HTTP %ld, %.0f ms)\n", m->provider, m->name,
@@ -1743,6 +1825,19 @@ static void native_request(Sock client, const char *path, const char *body, size
     up.chunk = native_chunk;
     up.ctx = &stream;
     int ok = fetch(key, url, body, n, &up);
+    if ((ok && body && up.status >= 200 && up.status < 300) || up.status == 401 || up.status == 403 ||
+        up.status == 429 || up.status == 402 || up.status >= 500 || !ok) {
+        LOCK();
+        key->health = ok && up.status >= 200 && up.status < 300 ? H_OK
+                      : up.status == 401                        ? H_INVALID
+                      : up.status == 403                        ? H_REJECTED
+                      : up.status == 429 || up.status == 402    ? H_LIMITED
+                                                                : H_DOWN;
+        key->http = (int)up.status;
+        key->checked = now_s();
+        save_health();
+        UNLOCK();
+    }
     if (!stream.started) {
         if (!ok) error_reply(client, 502, 0, "Native API request failed.");
         else if (response_headers(client, (int)up.status,
@@ -1867,11 +1962,13 @@ done:
     close_socket(client);
     LOCK();
     active_clients--;
+    if (!active_clients) pthread_cond_broadcast(&idle);
     UNLOCK();
     return NULL;
 }
 static void serve(void) {
     signal(SIGPIPE, SIG_IGN);
+    if (!offline() && refresh_seconds && !nm) sync_catalog(1);
     Sock listener = socket(AF_INET, SOCK_STREAM, 0);
     if (listener == BAD_SOCKET) die("socket failed");
     int one = 1;
@@ -1884,6 +1981,11 @@ static void serve(void) {
         die("cannot bind loopback port (another instance may be running)");
     fprintf(stderr, "Brokie listening at http://127.0.0.1:%d; %d models, %d keys; default %s\n", port, nm, nk,
             default_mode);
+    pthread_t updater;
+    if (!offline()) {
+        if (pthread_create(&updater, NULL, automatic_refresh, NULL)) die("cannot start automatic refresh");
+        pthread_detach(updater);
+    }
     for (;;) {
         Sock client = accept(listener, NULL, NULL);
         if (client == BAD_SOCKET) continue;
@@ -1891,6 +1993,7 @@ static void serve(void) {
         setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
         setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
         LOCK();
+        while (updating) pthread_cond_wait(&idle, &mutex);
         int full = active_clients >= 16;
         if (!full) active_clients++;
         UNLOCK();
@@ -1904,14 +2007,15 @@ static void serve(void) {
             close_socket(client);
             LOCK();
             active_clients--;
+            if (!active_clients) pthread_cond_broadcast(&idle);
             UNLOCK();
         } else pthread_detach(t);
     }
 }
 
 /* Small local administration CLI. Neither configuration nor logs contain keys. */
-static void replace_config(const char *name, Buf *value) {
-    Json j = json(config.p, config.n);
+static Buf replace_property(Buf *source, const char *name, Buf *value) {
+    Json j = json(source->p, source->n);
     Buf b = {0};
     put(&b, "{");
     int count = copy_members(&b, &j, 0, name, "null", 0);
@@ -1920,8 +2024,12 @@ static void replace_config(const char *name, Buf *value) {
     put(&b, ":");
     putn(&b, value->p, value->n);
     put(&b, "}\n");
-    if (!write_file("config.json", b.p, b.n)) die("cannot write config.json");
     jfree(&j);
+    return b;
+}
+static void replace_config(const char *name, Buf *value) {
+    Buf b = replace_property(&config, name, value);
+    if (!write_file("config.json", b.p, b.n)) die("cannot write config.json");
     drop(&config);
     config = b;
 }
@@ -2079,20 +2187,200 @@ static const Provider providers[] = {
     {"zhipu", "https://api.z.ai/api/paas/v4", "https://z.ai/manage-apikey/apikey-list", 0, 0}
 };
 // clang-format on
+static Provider registry[256];
+static char *registry_probes[256];
+static unsigned char registry_owned[256];
+static int nregistry;
+static void provider_defaults(void) {
+    if (nregistry) return;
+    memcpy(registry, providers, sizeof(providers));
+    nregistry = (int)(sizeof(providers) / sizeof(*providers));
+}
 static const Provider *provider_find(const char *id) {
-    for (size_t i = 0; i < sizeof(providers) / sizeof(*providers); i++)
-        if (!strcmp(providers[i].id, id)) return &providers[i];
+    provider_defaults();
+    for (int i = 0; i < nregistry; i++)
+        if (!strcmp(registry[i].id, id)) return &registry[i];
     return NULL;
 }
+static int provider_load(Buf *data) {
+    Json j = json(data->p, data->n);
+    if (j.bad || !j.n || j.t[0].type != '{') {
+        jfree(&j);
+        return 0;
+    }
+    int arr = get(&j, 0, "providers"), ok = 0;
+    Provider next[256] = {0};
+    char *probes[256] = {0};
+    unsigned char owned[256] = {0};
+    memcpy(next, providers, sizeof(providers));
+    int count = (int)(sizeof(providers) / sizeof(*providers));
+    if (arr < 0 || j.t[arr].type != '[' || !j.t[arr].n || j.t[arr].n > 256) goto done;
+    for (int q = 0; q < j.t[arr].n; q++) {
+        int row = at(&j, arr, q);
+        char *id = string(&j, get(&j, row, "id")), *url = string(&j, get(&j, row, "url")),
+             *signup = string(&j, get(&j, row, "signup")), *probe = string(&j, get(&j, row, "health_path"));
+        int slot = 0;
+        while (slot < count && strcmp(next[slot].id, id)) slot++;
+        int nt = get(&j, row, "native"), an = get(&j, row, "anonymous"), hp = get(&j, row, "health_path");
+        int valid = (nt < 0 || j.t[nt].type == 't' || j.t[nt].type == 'f') &&
+                    (an < 0 || j.t[an].type == 't' || j.t[an].type == 'f') && (hp < 0 || j.t[hp].type == '"') &&
+                    id[0] && strlen(id) < 96 && strspn(id, "abcdefghijklmnopqrstuvwxyz0123456789_-") == strlen(id) &&
+                    !strncmp(url, "https://", 8) && strlen(url) < 2048 && !strpbrk(url, "\r\n ") &&
+                    !strncmp(signup, "https://", 8) && strlen(signup) < 2048 && !strpbrk(signup, "\r\n ") &&
+                    strlen(probe) < 256 && (!probe[0] || probe[0] == '/' || !strcmp(probe, "-")) &&
+                    !strstr(probe, "://") && !strpbrk(probe, "\r\n") && slot < 256 && !owned[slot];
+        if (!valid) {
+            free(id);
+            free(url);
+            free(signup);
+            free(probe);
+            goto done;
+        }
+        if (slot == count) count++;
+        next[slot] = (Provider){id, url, signup, boolean(&j, get(&j, row, "native"), 0),
+                                boolean(&j, get(&j, row, "anonymous"), 0)};
+        probes[slot] = get(&j, row, "health_path") >= 0 ? probe : NULL;
+        if (!probes[slot]) free(probe);
+        owned[slot] = 1;
+    }
+    for (int i = 0; i < nregistry; i++)
+        if (registry_owned[i]) {
+            free((void *)registry[i].id);
+            free((void *)registry[i].url);
+            free((void *)registry[i].signup);
+            free(registry_probes[i]);
+        }
+    memcpy(registry, next, sizeof(next));
+    memcpy(registry_probes, probes, sizeof(probes));
+    memcpy(registry_owned, owned, sizeof(owned));
+    nregistry = count;
+    ok = 1;
+done:
+    if (!ok)
+        for (int i = 0; i < count; i++)
+            if (owned[i]) {
+                free((void *)next[i].id);
+                free((void *)next[i].url);
+                free((void *)next[i].signup);
+                free(probes[i]);
+            }
+    jfree(&j);
+    return ok;
+}
+#ifndef BROKIE_PROVIDERS_URL
+#define BROKIE_PROVIDERS_URL "https://raw.githubusercontent.com/ykahalan/brokie/main/providers.json"
+#endif
+static void provider_refresh(int force) {
+    provider_defaults();
+    Buf cached = read_file("providers.json");
+    if (cached.p) provider_load(&cached);
+    drop(&cached);
+    if (offline() || (!force && cache_age("providers.json") < 86400)) return;
+    Key anonymous = {.anonymous = 1};
+    Upstream up = {.timeout = 10000};
+    if (fetch(&anonymous, BROKIE_PROVIDERS_URL, NULL, 0, &up) && up.status == 200 && up.body.p &&
+        provider_load(&up.body)) {
+        if (!private_directory() || !write_file("providers.json", up.body.p, up.body.n))
+            fprintf(stderr, "brokie: could not cache provider directory\n");
+    } else fprintf(stderr, "brokie: provider refresh failed; keeping cached/bundled defaults\n");
+    drop(&up.body);
+}
+static const char *key_probe(Key *key) {
+    if (key->health_path[0]) return key->health_path;
+    const Provider *p = provider_find(key->provider);
+    if (p && registry_probes[p - registry]) return registry_probes[p - registry];
+    const char *id = key->provider;
+    if (!strcmp(id, "llmtr") || !strcmp(id, "iteracompute") || !strcmp(id, "kiosapi") || !strcmp(id, "freeai") ||
+        !strcmp(id, "modelscope"))
+        return "-";
+    if (!strcmp(id, "electronhub")) return "/user/me";
+    if (!strcmp(id, "xkiro")) return "/usage";
+    if (!strcmp(id, "simplellm")) return "/rate-limit";
+    if (!strcmp(id, "blockrun")) return "/account";
+    if (!strcmp(id, "kenari")) return "/account/balance";
+    if (!strcmp(id, "inferbase")) return "//api/v1/inference/credits";
+    if (!strcmp(id, "tavily")) return "/usage";
+    if (!strcmp(id, "firecrawl")) return "/team/credit-usage";
+    if (!strcmp(id, "linkup")) return "/credits/balance";
+    if (!strcmp(id, "speechify")) return "/workspaces/current/entitlements";
+    return key->native ? "-" : "/models";
+}
+static void check_keys(int force) {
+    if (offline()) return;
+    for (int i = 0; i < nk; i++) {
+        double started = now_s();
+        LOCK();
+        Key key = keys[i];
+        UNLOCK();
+        if (!key.enabled || (!force && started >= key.checked && started - key.checked < health_seconds)) {
+            secure_zero(key.secret, sizeof(key.secret));
+            continue;
+        }
+        int health = H_SKIP, http = 0;
+        const char *probe = key_probe(&key);
+        if (key.anonymous) health = H_ANONYMOUS;
+        else if (probe[0] == '/' && !strstr(probe, "://") && !strpbrk(probe, "\r\n")) {
+            char url[4096];
+            snprintf(url, sizeof(url), "%s", key.url);
+            char *end = key.native ? NULL : strstr(url, "/chat/completions");
+            if (end) *end = 0;
+            if (probe[1] == '/') {
+                char *scheme = strstr(url, "://"), *root = scheme ? strchr(scheme + 3, '/') : NULL;
+                if (root) *root = 0;
+                probe++;
+            }
+            size_t base = strlen(url);
+            snprintf(url + base, sizeof(url) - base, "%s", probe);
+            Upstream up = {.native = 1, .timeout = 5000};
+            int ok = fetch(&key, url, NULL, 0, &up);
+            http = (int)up.status;
+            health = !ok || http >= 500           ? H_DOWN
+                     : http == 401                ? H_INVALID
+                     : http == 403                ? H_REJECTED
+                     : http == 429 || http == 402 ? H_LIMITED
+                                                  : H_PUBLIC;
+            drop(&up.body);
+            if (ok && http >= 200 && http < 300) {
+                Key anonymous = key;
+                anonymous.anonymous = 1;
+                secure_zero(anonymous.secret, sizeof(anonymous.secret));
+                Upstream no_key = {.native = 1, .timeout = 5000};
+                if (fetch(&anonymous, url, NULL, 0, &no_key) && (no_key.status == 401 || no_key.status == 403))
+                    health = H_OK;
+                drop(&no_key.body);
+            }
+        }
+        secure_zero(key.secret, sizeof(key.secret));
+        LOCK();
+        if (keys[i].checked <= started) {
+            if (keys[i].health == H_INVALID && health == H_OK)
+                for (int m = 0; m < nm; m++) st(m, i)->cooldown = 0;
+            keys[i].health = health;
+            keys[i].http = http;
+            keys[i].checked = now_s();
+        }
+        UNLOCK();
+    }
+    LOCK();
+    save_health();
+    UNLOCK();
+}
+static void print_health(void) {
+    puts("KEY  PROVIDER  HEALTH  HTTP  CHECKED_AT_UTC_EPOCH");
+    for (int i = 0; i < nk; i++)
+        printf("%d  %s  %s  %d  %.0f\n", keys[i].id, keys[i].provider, health_names[keys[i].health], keys[i].http,
+               keys[i].checked);
+}
 static void provider_list(void) {
+    provider_refresh(0);
     Buf catalog = read_file("catalog.json"), cfg = read_file("config.json");
     Json cat = catalog.p ? json(catalog.p, catalog.n) : (Json){0};
     Json local = cfg.p ? json(cfg.p, cfg.n) : (Json){0};
     int platforms = catalog.p && !cat.bad ? get(&cat, 0, "platforms") : -1;
     int keys = cfg.p && !local.bad ? get(&local, 0, "keys") : -1;
     puts("PROVIDER         KEY       CATALOG  MODE     SIGN UP / GET KEY; API BASE");
-    for (size_t i = 0; i < sizeof(providers) / sizeof(*providers); i++) {
-        const Provider *p = &providers[i];
+    for (int i = 0; i < nregistry; i++) {
+        const Provider *p = &registry[i];
         int configured = 0, synced = 0;
         for (int q = 0; keys >= 0 && q < local.t[keys].n; q++) {
             int row = at(&local, keys, q);
@@ -2249,9 +2537,14 @@ static void discover(const char *provider) {
     drop(&up.body);
 }
 
-static const char catalog_pubkey[] =
-    "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAq9yv4+3EeyMHKsfVYBhkcz1lYgIXSUeHNnN6tNgYX3k=\n-----END "
-    "PUBLIC KEY-----\n";
+#ifndef BROKIE_CATALOG_URL
+#define BROKIE_CATALOG_URL "https://api.freellmapi.co/v1/latest"
+#endif
+#ifndef BROKIE_CATALOG_KEY
+#define BROKIE_CATALOG_KEY                                                                                             \
+    "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAq9yv4+3EeyMHKsfVYBhkcz1lYgIXSUeHNnN6tNgYX3k=\n-----END PUBLIC KEY-----\n"
+#endif
+static const char catalog_pubkey[] = BROKIE_CATALOG_KEY;
 static int verify_catalog(Upstream *up) {
     unsigned char sig[192];
     int n = (int)strlen(up->signature);
@@ -2319,42 +2612,46 @@ static void catalog_row(Buf *b, Json *remote, int r, Json *local, int old, int i
     }
     put(b, "}");
 }
-static void sync_catalog(void) {
-    Key key = {0};
-    key.anonymous = 1;
-    Buf v = vault_read();
-    Json vj = json(v.p, v.n);
-    if (vj.bad) die("invalid vault");
-    fieldstr(&vj, 0, "catalog_license", key.secret, sizeof(key.secret));
-    key.anonymous = !key.secret[0];
-    jfree(&vj);
-    secure_zero(v.p, v.n);
-    drop(&v);
-    Upstream up = {0};
-    if (!fetch(&key, "https://api.freellmapi.co/v1/latest", NULL, 0, &up) || up.status != 200 || !up.body.p)
-        die("catalog fetch failed; existing catalog is unchanged");
+/* Stage and validate a complete update before changing files or live routing state. */
+static int sync_catalog(int live) {
+    if (offline()) return 0;
+    Key key = {.anonymous = !catalog_license[0]};
+    snprintf(key.secret, sizeof(key.secret), "%s", catalog_license);
+    Upstream up = {.timeout = 10000};
+    int fetched = fetch(&key, BROKIE_CATALOG_URL, NULL, 0, &up);
     secure_zero(key.secret, sizeof(key.secret));
-    if (!verify_catalog(&up)) die("catalog signature is missing or invalid; existing catalog is unchanged");
-    Json remote = json(up.body.p, up.body.n), local = json(config.p, config.n);
+    Buf current = {0}, rows = {0}, next = {0}, version_json = {0};
+    Json remote = {0}, local = {0};
+    Model *next_models = NULL;
+    Stats *next_stats = NULL;
+    int ok = 0, count = 0, next_id = 1, gated = 0;
+    if (!fetched || up.status != 200 || !up.body.p || !verify_catalog(&up)) goto done;
+    remote = json(up.body.p, up.body.n);
+    current = read_file("config.json");
+    local = json(current.p, current.n);
+    next_models = mem(MAX_MODELS * sizeof(Model));
+    if (remote.bad || !remote.n || remote.t[0].type != '{' || !parse_models(&local, next_models, &count)) goto done;
+    for (int i = 0; i < count; i++)
+        if (next_models[i].id >= next_id) {
+            if (next_models[i].id >= 2147483647) goto done;
+            next_id = next_models[i].id + 1;
+        }
     int arr = get(&remote, 0, "models"), oldarr = get(&local, 0, "models");
     char version[128], applied[128];
     fieldstr(&remote, 0, "version", version, sizeof(version));
     fieldstr(&local, 0, "catalog_version", applied, sizeof(applied));
-    if (remote.bad || arr < 0 || remote.t[arr].type != '[' || !version[0]) die("invalid catalog structure");
-    if (applied[0] && strcmp(version, applied) < 0) die("catalog is older than the applied version");
-    int next_id = 1;
-    for (int i = 0; i < nm; i++)
-        if (models[i].id >= next_id) next_id = models[i].id + 1;
-    Buf rows = {0};
+    if (arr < 0 || remote.t[arr].type != '[' || !version[0] || (applied[0] && strcmp(version, applied) < 0)) goto done;
     put(&rows, "[");
-    int count = 0;
+    count = 0;
     for (int i = 0; i < remote.t[arr].n; i++) {
         int r = at(&remote, arr, i), modality = get(&remote, r, "modality");
         if (modality >= 0 && !eq(&remote, modality, "text")) continue;
         char provider[96], name[320];
         fieldstr(&remote, r, "platform", provider, sizeof(provider));
         fieldstr(&remote, r, "modelId", name, sizeof(name));
-        if (!provider[0] || !name[0]) die("catalog model missing identity");
+        if (!provider[0] || !name[0]) goto done;
+        double enabled = fieldnum(&remote, r, "enabled", 0);
+        if (!isfinite(enabled) || fabs(enabled) > 2147483647.) goto done;
         int old = -1, id = next_id;
         for (int q = 0; oldarr >= 0 && q < local.t[oldarr].n; q++) {
             int row = at(&local, oldarr, q);
@@ -2365,7 +2662,10 @@ static void sync_catalog(void) {
             }
         }
         if (old >= 0 && !eq(&local, get(&local, old, "source"), "catalog")) continue;
-        if (old < 0) next_id++;
+        if (old < 0) {
+            if (next_id >= 2147483647) goto done;
+            next_id++;
+        }
         if (count++) put(&rows, ",");
         catalog_row(&rows, &remote, r, &local, old, id);
     }
@@ -2376,20 +2676,89 @@ static void sync_catalog(void) {
             raw(&rows, &local, row, "{}");
         }
     }
-    if (count > MAX_MODELS) die("catalog exceeds model capacity");
+    if (count > MAX_MODELS) goto done;
     put(&rows, "]");
+    Buf updated = replace_property(&current, "models", &rows);
+    quote(&version_json, version);
+    next = replace_property(&updated, "catalog_version", &version_json);
+    drop(&updated);
+    Json parsed = json(next.p, next.n);
+    int valid = parse_models(&parsed, next_models, &count);
+    jfree(&parsed);
+    if (!valid) goto done;
+    if (live) {
+        next_stats = mem((size_t)(nk ? nk : 1) * (count ? count : 1) * sizeof(Stats));
+        LOCK();
+        gated = updating = 1;
+        while (active_clients) pthread_cond_wait(&idle, &mutex);
+    }
+    Buf latest = read_file("config.json");
+    int unchanged = latest.n == current.n && latest.p && !memcmp(latest.p, current.p, current.n);
+    drop(&latest);
+    if (!unchanged || !write_file("config.json", next.p, next.n)) goto done;
+    if (live) {
+        for (int m = 0; m < count; m++) {
+            int old = model_index(next_models[m].id);
+            if (old >= 0) memcpy(next_stats + (size_t)m * nk, st(old, 0), (size_t)nk * sizeof(Stats));
+        }
+        for (int q = 0; q < 128; q++)
+            if (sticky[q].hash) {
+                int found = -1;
+                for (int m = 0; m < count; m++)
+                    if (models[sticky[q].model].id == next_models[m].id) found = m;
+                if (found < 0) sticky[q].hash = 0;
+                else sticky[q].model = found;
+            }
+        memcpy(models, next_models, (size_t)count * sizeof(Model));
+        nm = count;
+        free(stats);
+        stats = next_stats;
+        next_stats = NULL;
+        drop(&config);
+        config = next;
+        memset(&next, 0, sizeof(next));
+    }
+    if (!write_file("catalog.json", up.body.p, up.body.n)) fprintf(stderr, "brokie: catalog cache write failed\n");
+    fprintf(stderr, "Applied signed catalog %s (%d chat models)%s.\n", version, count, live ? " to live router" : "");
+    ok = 1;
+done:
+    if (gated) {
+        updating = 0;
+        pthread_cond_broadcast(&idle);
+        UNLOCK();
+    }
+    if (!ok) fprintf(stderr, "brokie: catalog refresh failed; keeping existing routing data\n");
+    free(next_models);
+    free(next_stats);
     jfree(&remote);
     jfree(&local);
-    replace_config("models", &rows);
+    drop(&current);
     drop(&rows);
-    Buf ver = {0};
-    quote(&ver, version);
-    replace_config("catalog_version", &ver);
-    drop(&ver);
-    if (!write_file("catalog.json", up.body.p, up.body.n)) die("catalog applied but cache write failed");
+    drop(&next);
+    drop(&version_json);
     drop(&up.body);
-    printf("Applied signed catalog %s (%d chat models). Local keys, profiles and user models preserved.\n", version,
-           count);
+    return ok;
+}
+static void *automatic_refresh(void *unused) {
+    (void)unused;
+    double next_catalog = 0, next_providers = 0, next_health = 0;
+    for (;;) {
+        double now = now_s();
+        if (now >= next_providers) {
+            provider_refresh(0);
+            next_providers = now_s() + 3600;
+        }
+        if (refresh_seconds && now >= next_catalog) {
+            int ok = sync_catalog(1);
+            next_catalog = now_s() + (ok ? refresh_seconds : fmin(300, refresh_seconds));
+        }
+        if (health_seconds && now_s() >= next_health) {
+            check_keys(0);
+            next_health = now_s() + fmin(60, health_seconds);
+        }
+        sleep(1);
+    }
+    return NULL;
 }
 static void selftest(void) {
     const char escaped[] = "{\"\\u0061\":1}";
@@ -2424,7 +2793,7 @@ int main(int argc, char **argv) {
     }
     if (p >= argc) {
         puts(
-            "brokie [--dir DIR] init | providers | stats | serve | list [MODE] | mode MODE | key add PROVIDER [BASE_URL] "
+            "brokie [--dir DIR] init | providers | stats | health | check | serve | list [MODE] | mode MODE | key add PROVIDER [BASE_URL] "
             "[--anonymous] [--native] | model add PROVIDER MODEL | discover PROVIDER | sync | license | claude [MODE] "
             "| run CLIENT [MODE] | selftest");
         return 0;
@@ -2443,10 +2812,15 @@ int main(int argc, char **argv) {
         provider_list();
         return 0;
     }
-    load_config(strcmp(cmd, "mode") && strcmp(cmd, "model") && strcmp(cmd, "stats"));
+    load_config(strcmp(cmd, "mode") && strcmp(cmd, "model") && strcmp(cmd, "stats") && strcmp(cmd, "health"));
     if (!strcmp(cmd, "serve")) serve();
     else if (!strcmp(cmd, "stats")) usage_stats();
-    else if (!strcmp(cmd, "list")) list_routes(p < argc ? argv[p] : default_mode);
+    else if (!strcmp(cmd, "health")) print_health();
+    else if (!strcmp(cmd, "check")) {
+        provider_refresh(0);
+        check_keys(1);
+        print_health();
+    } else if (!strcmp(cmd, "list")) list_routes(p < argc ? argv[p] : default_mode);
     else if (!strcmp(cmd, "mode")) {
         if (p >= argc || !valid_mode(argv[p])) die("mode must be smartest, fastest, reliable or balanced");
         Buf b = {0};
@@ -2455,6 +2829,7 @@ int main(int argc, char **argv) {
         drop(&b);
         puts("Default mode saved; restart the server to apply it.");
     } else if (!strcmp(cmd, "key") && p + 1 < argc && !strcmp(argv[p], "add")) {
+        provider_refresh(0);
         const Provider *preset = provider_find(argv[p + 1]);
         int next = p + 2, anonymous = 0, native = preset && preset->native;
         const char *base = next < argc && strncmp(argv[next], "--", 2) ? argv[next++] : preset ? preset->url : NULL;
@@ -2476,8 +2851,10 @@ int main(int argc, char **argv) {
         add_key(argv[p + 1], base, anonymous, native);
     } else if (!strcmp(cmd, "model") && p + 2 < argc && !strcmp(argv[p], "add")) add_model(argv[p + 1], argv[p + 2]);
     else if (!strcmp(cmd, "discover") && p < argc) discover(argv[p]);
-    else if (!strcmp(cmd, "sync")) sync_catalog();
-    else if (!strcmp(cmd, "license")) {
+    else if (!strcmp(cmd, "sync")) {
+        provider_refresh(1);
+        if (!sync_catalog(0)) die("catalog sync failed");
+    } else if (!strcmp(cmd, "license")) {
         char value[4096];
         if (!hidden_input("Catalog license (hidden): ", value, sizeof(value))) die("license required");
         write_vault_property("catalog_license", value, 0);
@@ -2492,6 +2869,7 @@ int main(int argc, char **argv) {
     secure_zero(keys, sizeof(keys));
     secure_zero(auth_token, sizeof(auth_token));
     secure_zero(password, sizeof(password));
+    secure_zero(catalog_license, sizeof(catalog_license));
     free(stats);
     drop(&config);
     curl_global_cleanup();
