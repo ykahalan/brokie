@@ -7,7 +7,7 @@ A tiny LLM gateway for stretching free-tier quotas, based on the code and ideas 
 [UltimateWrap](https://github.com/Osamious/ultimatewrap) by **Osama Hasoneh**.
 
 A standalone, single-file C gateway for OpenAI-compatible clients and Claude Code.
-Runs on Linux/WSL; uses portable POSIX APIs for macOS. Requires libcurl and OpenSSL 3.
+Runs on Linux, macOS, and Windows through WSL. Requires libcurl and OpenSSL 3.
 No Node server, Python runtime, database, FreeLLMAPI installation, or CCR gateway is required.
 
 The complete implementation is `brokie.c`. `build.sh` is only a build convenience.
@@ -30,7 +30,7 @@ sh build.sh
 ```
 
 Compile from source on each platform. Linux/WSL has been verified locally;
-the included GitHub Actions workflow also builds and checks macOS.
+GitHub Actions builds and checks both Ubuntu and Apple Silicon macOS.
 
 ## Start from scratch
 
@@ -197,7 +197,8 @@ The gateway independently checks the selected model's configured context before 
 
 Verified in Ubuntu WSL: strict warning-free C build, 25 offline protocol checks, ASan/UBSan checks,
 real catalog signature verification, live OpenAI text and Anthropic tool-call responses, and a real
-Claude Code prompt. macOS is a portable source target awaiting verification on a Mac.
+Claude Code prompt. GitHub Actions also passed the build and all 25 offline checks on
+Ubuntu and Apple Silicon macOS.
 
 ## Credits and code provenance
 
