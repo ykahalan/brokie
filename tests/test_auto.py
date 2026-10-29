@@ -177,8 +177,9 @@ def main():
                 wait_for(lambda: config()['catalog_version'] == state['version'], 'hot swap')
                 check('new live model routes and removed pin fails', chat('valid/second')[0] == 200 and chat('valid/first')[0] == 503)
                 check('retained local model routes after index remapping', chat('valid/local')[0] == 200)
-                check('stats remain attached to stable model IDs', any(s['model'] == 20 and s['month_tokens'] > 0
-                      for s in json.loads((folder / 'stats.json').read_text())))
+                wait_for(lambda: any(s['model'] == 20 and s['month_tokens'] > 0
+                         for s in json.loads((folder / 'stats.json').read_text())), 'persisted local model usage')
+                check('stats remain attached to stable model IDs', True)
                 for failure in ('signature', 'network', 'malformed', 'overflow'):
                     state.update(version='2026.01.03', model='broken', failure=failure)
                     before = sum(c[1] == '/catalog' for c in calls)
