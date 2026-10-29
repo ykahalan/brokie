@@ -49,6 +49,7 @@ The launchers supply authentication and model settings automatically.
 [Provider sign-up links and API bases](PROVIDERS.md), including image, audio, and search.
 The server refreshes the signed model catalog hourly and checks keys every 15 minutes;
 provider setup links refresh daily. `check` checks keys now; `health` shows cached results.
+Public metadata responses stay `unverified`; disabled keys are labeled explicitly.
 Use `/native/PROVIDER/PATH` for native APIs. Restart after editing keys/settings.
 `BROKIE_OFFLINE=1` disables background downloads and checks. Provider quotas and charges apply.
 

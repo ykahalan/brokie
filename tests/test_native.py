@@ -80,6 +80,15 @@ def main():
             out = r.status, r.getheader('Content-Type'), r.read()
             c.close()
             return out
+        def recorded_health(expected):
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                try:
+                    rows = json.loads((folder / 'health.json').read_text())
+                    if any(row['id'] == 7 and row['health'] == expected for row in rows): return True
+                except (OSError, ValueError): pass
+                time.sleep(.02)
+            return False
         try:
             for _ in range(100):
                 try:
@@ -108,7 +117,9 @@ def main():
             check('responses larger than buffer limit stream', request('/native/mock/large')[2] == large)
             check('native SSE preserved', request('/native/mock/events')[2] == b'data: {"x":1}\n\ndata: [DONE]\n\n')
             check('upstream error status and body preserved', request('/native/mock/error')[::2] == (429, b'{"error":"quota"}'))
+            check('native quota error records limited key health', recorded_health(4))
             check('non-200 success preserved', request('/native/mock/created', b'{}')[0] == 201)
+            check('successful native request records healthy key', recorded_health(1))
             check('unknown provider rejected', request('/native/missing/search')[0] == 404)
             request(f'/native/mock@{len(names) + 1}/search')
             check('explicit credential selects its API base', calls[-1][1] == '/other/search')

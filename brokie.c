@@ -588,6 +588,29 @@ static void load_health(void) {
     drop(&b);
 }
 static double now_s(void) { return (double)time(NULL); }
+static int response_health(int ok, long http) {
+    return !ok || http >= 500           ? H_DOWN
+           : http == 401                ? H_INVALID
+           : http == 403                ? H_REJECTED
+           : http == 402 || http == 429 ? H_LIMITED
+                                        : H_PUBLIC;
+}
+/* Caller holds the state mutex. */
+static void set_health(Key *key, int health, long http) {
+    key->health = health;
+    key->http = (int)http;
+    key->checked = now_s();
+}
+static int key_url(char *url, size_t cap, const Key *key, const char *path, int root_path) {
+    const char *end = key->native ? NULL : strstr(key->url, "/chat/completions");
+    if (root_path) {
+        const char *scheme = strstr(key->url, "://");
+        end = scheme ? strchr(scheme + 3, '/') : NULL;
+        path++;
+    }
+    size_t base = end ? (size_t)(end - key->url) : strlen(key->url);
+    return snprintf(url, cap, "%.*s%s", (int)base, key->url, path) < (int)cap;
+}
 static long long month_id(void) {
     time_t t = time(NULL);
     struct tm m;
@@ -677,15 +700,8 @@ static void save_state(void) {
 static int parse_models(Json *j, Model *out, int *count) {
     int n = 0;
     if (j->bad || !j->n || j->t[0].type != '{') return 0;
-    char profile[160];
-    fieldstr(j, 0, "profile", profile, sizeof(profile));
-    int profiles = get(j, 0, "profiles"), chain = -1;
-    if (profile[0])
-        for (int i = 0; profiles >= 0 && i < j->t[profiles].n; i++) {
-            int r = at(j, profiles, i);
-            if (eq(j, get(j, r, "name"), profile)) chain = get(j, r, "models");
-        }
-    if (profile[0] && chain < 0) return 0;
+    int profile = get(j, 0, "profile");
+    if (profile >= 0 && !eq(j, profile, "")) return 0;
     int a = get(j, 0, "models");
     if (a >= 0 && j->t[a].type != '[') return 0;
     if (a >= 0 && j->t[a].n > MAX_MODELS) return 0;
@@ -718,16 +734,6 @@ static int parse_models(Json *j, Model *out, int *count) {
         if (m->id < 1 || !m->provider[0] || !m->name[0] || !isfinite(m->budget)) return 0;
         for (int q = 0; q < n - 1; q++)
             if (out[q].id == m->id) return 0;
-        if (chain >= 0) {
-            int found = 0;
-            for (int q = 0; q < j->t[chain].n; q++)
-                if ((int)number(j, at(j, chain, q), -1) == m->id) {
-                    found = 1;
-                    m->priority = q;
-                    break;
-                }
-            m->enabled &= found;
-        }
     }
     *count = n;
     return 1;
@@ -759,7 +765,7 @@ static void load_config(int need_vault) {
         fieldstr(&j, r, "url", k->url, sizeof(k->url));
         fieldstr(&j, r, "health_path", k->health_path, sizeof(k->health_path));
     }
-    if (!parse_models(&j, models, &nm)) die("invalid models or profile");
+    if (!parse_models(&j, models, &nm)) die("invalid models; named profiles were removed, use model enabled flags");
     jfree(&j);
     load_health();
     if (need_vault) {
@@ -1712,16 +1718,8 @@ static void complete_request(Sock client, Json *original, int anthropic) {
         s->day_tokens = fmax(0, s->day_tokens - estimate + actual);
         s->month_tokens += actual;
         if (!stream.disconnected) {
-            if (success || !transport || up.status >= 500 || up.status == 401 || up.status == 403 || up.status == 429 ||
-                up.status == 402) {
-                key->health = success                                ? H_OK
-                              : up.status == 401                     ? H_INVALID
-                              : up.status == 403                     ? H_REJECTED
-                              : up.status == 429 || up.status == 402 ? H_LIMITED
-                                                                     : H_DOWN;
-                key->http = (int)up.status;
-                key->checked = now_s();
-            }
+            int health = response_health(transport, up.status);
+            if (success || health != H_PUBLIC) set_health(key, success ? H_OK : health, up.status);
             if (success) {
                 s->s++;
                 s->out += output;
@@ -1811,30 +1809,19 @@ static void native_request(Sock client, const char *path, const char *body, size
         return;
     }
     char url[4096];
-    snprintf(url, sizeof(url), "%s", key->url);
-    char *end = key->native ? NULL : strstr(url, "/chat/completions");
-    if (end) *end = 0;
-    size_t base = strlen(url);
-    if (base + strlen(slash) >= sizeof(url)) {
+    if (!key_url(url, sizeof(url), key, slash, 0)) {
         error_reply(client, 414, 0, "Native API path is too long.");
         return;
     }
-    memcpy(url + base, slash, strlen(slash) + 1);
     Upstream up = {.native = 1, .request_type = type};
     Native stream = {client, &up, 0};
     up.chunk = native_chunk;
     up.ctx = &stream;
     int ok = fetch(key, url, body, n, &up);
-    if ((ok && body && up.status >= 200 && up.status < 300) || up.status == 401 || up.status == 403 ||
-        up.status == 429 || up.status == 402 || up.status >= 500 || !ok) {
+    int health = response_health(ok, up.status);
+    if ((ok && body && up.status >= 200 && up.status < 300) || health != H_PUBLIC) {
         LOCK();
-        key->health = ok && up.status >= 200 && up.status < 300 ? H_OK
-                      : up.status == 401                        ? H_INVALID
-                      : up.status == 403                        ? H_REJECTED
-                      : up.status == 429 || up.status == 402    ? H_LIMITED
-                                                                : H_DOWN;
-        key->http = (int)up.status;
-        key->checked = now_s();
+        set_health(key, health == H_PUBLIC ? H_OK : health, up.status);
         save_health();
         UNLOCK();
     }
@@ -2064,9 +2051,8 @@ static void initialize(void) {
     if (!vault_write(&vault, 1)) die("cannot create vault");
     secure_zero(vault.p, vault.n);
     drop(&vault);
-    const char *initial =
-        "{\n  \"port\":31817, \"mode\":\"smartest\", \"timeout_ms\":60000, \"max_attempts\":6, "
-        "\"sticky_seconds\":1800,\n  \"profile\":\"\", \"profiles\":[], \"keys\":[], \"models\":[]\n}\n";
+    const char *initial = "{\n  \"port\":31817, \"mode\":\"smartest\", \"timeout_ms\":60000, \"max_attempts\":6, "
+                          "\"sticky_seconds\":1800,\n  \"keys\":[], \"models\":[]\n}\n";
     if (!write_file("config.json", initial, strlen(initial))) die("cannot create config");
     puts("Initialized private configuration and encrypted vault.");
 }
@@ -2101,94 +2087,93 @@ static void write_vault_property(const char *name, const char *value, int key_id
     drop(&b);
 }
 typedef struct {
-    const char *id, *url, *signup;
+    const char *id, *url, *signup, *probe;
     int native, anonymous;
 } Provider;
 /* Provider metadata from FreeLLMAPI; API keys never belong here. See PROVIDERS.md. */
 // clang-format off
 static const Provider providers[] = {
-    {"aclide", "https://aclide.com/v1", "https://aclide.com/en/dashboard/api-keys", 1, 0},
-    {"agnes", "https://apihub.agnes-ai.com/v1", "https://platform.agnes-ai.com", 0, 0},
-    {"aihorde", "https://oai.aihorde.net/v1", "https://aihorde.net/register", 1, 1},
-    {"ainative", "https://api.ainative.studio/api/v1", "https://ainative.studio", 0, 0},
-    {"aion", "https://api.aionlabs.ai/v1", "https://www.aionlabs.ai", 0, 0},
-    {"airforce", "https://api.airforce/v1", "https://api.airforce", 0, 0},
-    {"anyapi", "https://api.anyapi.ai/v1", "https://anyapi.ai", 0, 0},
-    {"apinex", "https://api.apinex.bond/v1", "https://apinex.bond/keys", 0, 0},
-    {"bai", "https://api.b.ai/v1", "https://b.ai", 0, 0},
-    {"bazaarlink", "https://bazaarlink.ai/api/v1", "https://bazaarlink.ai", 0, 0},
-    {"beatapi", "https://api.beatapi.io/v1", "https://beatapi.io", 0, 0},
-    {"blaze", "https://api.blazeapi.org/paid/v1", "https://blazeapi.org/dashboard", 0, 0},
-    {"blockrun", "https://api.blockrun.ai/v1", "https://user.blockrun.ai/dashboard/keys", 0, 0},
-    {"brave", "https://api.search.brave.com/res/v1", "https://api-dashboard.search.brave.com", 1, 0},
-    {"cerebras", "https://api.cerebras.ai/v1", "https://cloud.cerebras.ai", 0, 0},
-    {"clod", "https://api.clod.io/v1", "https://newapp.clod.io", 0, 0},
-    {"cloudflare", "https://api.cloudflare.com/client/v4/accounts/YOUR_ACCOUNT_ID/ai/v1", "https://dash.cloudflare.com", 0, 0},
-    {"cohere", "https://api.cohere.ai/compatibility/v1", "https://dashboard.cohere.com/api-keys", 0, 0},
-    {"dreamprompting", "https://dreamprompting.com/api/v1", "https://dreamprompting.com", 0, 0},
-    {"electronhub", "https://api.electronhub.ai/v1", "https://app.electronhub.ai", 0, 0},
-    {"exa", "https://api.exa.ai", "https://dashboard.exa.ai/api-keys", 1, 0},
-    {"experiential", "https://api.experientiallabs.ai/v1", "https://platform.experientiallabs.ai", 0, 0},
-    {"firecrawl", "https://api.firecrawl.dev/v2", "https://www.firecrawl.dev/app/api-keys", 1, 0},
-    {"freeai", "https://api.free.ai", "https://free.ai/account/#api-keys", 1, 0},
-    {"gizmo", "https://api.gizmoplatforms.com/api/v1", "https://gizmoplatforms.com/developers", 0, 0},
-    {"google", "https://generativelanguage.googleapis.com/v1beta/openai", "https://aistudio.google.com/apikey", 0, 0},
-    {"groq", "https://api.groq.com/openai/v1", "https://console.groq.com/keys", 0, 0},
-    {"huggingface", "https://router.huggingface.co/v1", "https://huggingface.co/settings/tokens", 0, 0},
-    {"inferbase", "https://api.inferbase.ai/v1", "https://inferbase.ai", 0, 0},
-    {"iteracompute", "https://api.iteracompute.com/v1", "https://iteracompute.com/free/", 0, 0},
-    {"keenable", "https://api.keenable.ai/v1", "https://app.keenable.ai", 1, 1},
-    {"kenari", "https://kenari.id/v1", "https://kenari.id", 0, 0},
-    {"kilo", "https://api.kilo.ai/api/gateway/v1", "https://app.kilo.ai", 0, 1},
-    {"kiosapi", "https://api.kiosapi.id/v1", "https://kiosapi.id/dashboard/keys", 0, 0},
-    {"linkup", "https://api.linkup.so/v1", "https://app.linkup.so", 1, 0},
-    {"llm7", "https://api.llm7.io/v1", "https://llm7.io", 0, 0},
-    {"llmtr", "https://llmtr.com/v1", "https://llmtr.com", 0, 0},
-    {"logfare", "https://logfare.ai/v1", "https://logfare.ai", 0, 0},
-    {"longcat", "https://api.longcat.chat/openai/v1", "https://longcat.chat/platform", 0, 0},
-    {"lucidity", "https://composite.lucidity.sh/v1", "https://composite.lucidity.sh", 0, 0},
-    {"mistral", "https://api.mistral.ai/v1", "https://console.mistral.ai/api-keys/", 0, 0},
-    {"modelscope", "https://api-inference.modelscope.cn/v1", "https://modelscope.cn/my/myaccesstoken", 0, 0},
-    {"moondream", "https://api.moondream.ai/v1", "https://moondream.ai/c/cloud/api-keys", 0, 0},
-    {"nara", "https://router.bynara.id/v1", "https://router.bynara.id", 0, 0},
-    {"navy", "https://api.navy/v1", "https://api.navy", 0, 0},
-    {"nvidia", "https://integrate.api.nvidia.com/v1", "https://build.nvidia.com/settings/api-keys", 0, 0},
-    {"ollama", "https://ollama.com/v1", "https://ollama.com/settings/keys", 0, 0},
-    {"onomeo", "https://onomeo.com/v1", "https://onomeo.com/dashboard", 0, 0},
-    {"opencode", "https://opencode.ai/zen/v1", "https://opencode.ai/auth", 0, 0},
-    {"openrouter", "https://openrouter.ai/api/v1", "https://openrouter.ai/keys", 0, 0},
-    {"orcarouter", "https://api.orcarouter.ai/v1", "https://www.orcarouter.ai", 0, 0},
-    {"ovh", "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1", "https://endpoints.ai.cloud.ovh.net", 0, 1},
-    {"parallel", "https://api.parallel.ai/v1", "https://platform.parallel.ai", 1, 0},
-    {"pinecone", "https://api.pinecone.io", "https://app.pinecone.io", 1, 0},
-    {"plugsky", "https://plugsky.com/v1", "https://plugsky.com/dashboard", 0, 0},
-    {"pollinations", "https://gen.pollinations.ai/v1", "https://enter.pollinations.ai", 0, 0},
-    {"qianfan", "https://qianfan.baidubce.com/v2", "https://console.bce.baidu.com/qianfan/overview", 0, 0},
-    {"radeon", "https://developer.amd.com.cn/radeon/api/v1", "https://developer.amd.com.cn/radeon/tokenfactory", 0, 0},
-    {"reka", "https://api.reka.ai/v1", "https://platform.reka.ai", 0, 0},
-    {"requesty", "https://router.requesty.ai/v1", "https://www.requesty.ai", 0, 0},
-    {"router9", "https://api.router9.com/v1", "https://www.router9.com", 0, 0},
-    {"routeway", "https://api.routeway.ai/v1", "https://routeway.ai", 0, 0},
-    {"sail", "https://api.sailresearch.com/v1", "https://app.sailresearch.com", 1, 0},
-    {"sealion", "https://api.sea-lion.ai/v1", "https://sea-lion.ai", 0, 0},
-    {"septor", "https://api.septorlabs.com/v1", "https://septorlabs.com/dashboard", 0, 0},
-    {"serpsearch", "https://api.serpsearch.com/api/v1", "https://serpsearch.com", 1, 0},
-    {"siliconflow", "https://api.siliconflow.com/v1", "https://siliconflow.com", 0, 0},
-    {"simplellm", "https://api.simplellm.eu/v1", "https://app.simplellm.eu", 0, 0},
-    {"speechify", "https://api.speechify.ai/v1", "https://platform.speechify.ai", 1, 0},
-    {"speka", "https://speka.me/v1", "https://speka.me/dashboard/keys", 0, 0},
-    {"tavily", "https://api.tavily.com", "https://app.tavily.com", 1, 0},
-    {"typhoon", "https://api.opentyphoon.ai/v1", "https://playground.opentyphoon.ai", 0, 0},
-    {"unorouter", "https://api.unorouter.com/v1", "https://unorouter.com", 0, 0},
-    {"volcengine", "https://ark.cn-beijing.volces.com/api/v3", "https://console.volcengine.com/ark", 0, 0},
-    {"waterfall", "https://api.getwaterfall.org/v1", "https://getwaterfall.org", 0, 0},
-    {"xfyun", "https://spark-api-open.xf-yun.com/v1", "https://console.xfyun.cn", 0, 0},
-    {"xkiro", "https://api.xkiro.com/v1", "https://xkiro.com", 0, 0},
-    {"zhipu", "https://api.z.ai/api/paas/v4", "https://z.ai/manage-apikey/apikey-list", 0, 0}
+    {"aclide", "https://aclide.com/v1", "https://aclide.com/en/dashboard/api-keys", "-", 1, 0},
+    {"agnes", "https://apihub.agnes-ai.com/v1", "https://platform.agnes-ai.com", "/models", 0, 0},
+    {"aihorde", "https://oai.aihorde.net/v1", "https://aihorde.net/register", "-", 1, 1},
+    {"ainative", "https://api.ainative.studio/api/v1", "https://ainative.studio", "/models", 0, 0},
+    {"aion", "https://api.aionlabs.ai/v1", "https://www.aionlabs.ai", "/models", 0, 0},
+    {"airforce", "https://api.airforce/v1", "https://api.airforce", "/models", 0, 0},
+    {"anyapi", "https://api.anyapi.ai/v1", "https://anyapi.ai", "/models", 0, 0},
+    {"apinex", "https://api.apinex.bond/v1", "https://apinex.bond/keys", "/models", 0, 0},
+    {"bai", "https://api.b.ai/v1", "https://b.ai", "/models", 0, 0},
+    {"bazaarlink", "https://bazaarlink.ai/api/v1", "https://bazaarlink.ai", "/models", 0, 0},
+    {"beatapi", "https://api.beatapi.io/v1", "https://beatapi.io", "-", 1, 0},
+    {"blaze", "https://api.blazeapi.org/paid/v1", "https://blazeapi.org/dashboard", "/models", 0, 0},
+    {"blockrun", "https://api.blockrun.ai/v1", "https://user.blockrun.ai/dashboard/keys", "/account", 0, 0},
+    {"brave", "https://api.search.brave.com/res/v1", "https://api-dashboard.search.brave.com", "-", 1, 0},
+    {"cerebras", "https://api.cerebras.ai/v1", "https://cloud.cerebras.ai", "/models", 0, 0},
+    {"clod", "https://api.clod.io/v1", "https://newapp.clod.io", "/models", 0, 0},
+    {"cloudflare", "https://api.cloudflare.com/client/v4/accounts/YOUR_ACCOUNT_ID/ai/v1", "https://dash.cloudflare.com", "/models", 0, 0},
+    {"cohere", "https://api.cohere.ai/compatibility/v1", "https://dashboard.cohere.com/api-keys", "/models", 0, 0},
+    {"dreamprompting", "https://dreamprompting.com/api/v1", "https://dreamprompting.com", "/models", 0, 0},
+    {"electronhub", "https://api.electronhub.ai/v1", "https://app.electronhub.ai", "/user/me", 0, 0},
+    {"exa", "https://api.exa.ai", "https://dashboard.exa.ai/api-keys", "-", 1, 0},
+    {"experiential", "https://api.experientiallabs.ai/v1", "https://platform.experientiallabs.ai", "/models", 0, 0},
+    {"firecrawl", "https://api.firecrawl.dev/v2", "https://www.firecrawl.dev/app/api-keys", "/team/credit-usage", 1, 0},
+    {"freeai", "https://api.free.ai", "https://free.ai/account/#api-keys", "-", 1, 0},
+    {"gizmo", "https://api.gizmoplatforms.com/api/v1", "https://gizmoplatforms.com/developers", "/models", 0, 0},
+    {"google", "https://generativelanguage.googleapis.com/v1beta/openai", "https://aistudio.google.com/apikey", "/models", 0, 0},
+    {"groq", "https://api.groq.com/openai/v1", "https://console.groq.com/keys", "/models", 0, 0},
+    {"huggingface", "https://router.huggingface.co/v1", "https://huggingface.co/settings/tokens", "/models", 0, 0},
+    {"inferbase", "https://api.inferbase.ai/v1", "https://inferbase.ai", "//api/v1/inference/credits", 0, 0},
+    {"iteracompute", "https://api.iteracompute.com/v1", "https://iteracompute.com/free/", "-", 0, 0},
+    {"keenable", "https://api.keenable.ai/v1", "https://app.keenable.ai", "-", 1, 1},
+    {"kenari", "https://kenari.id/v1", "https://kenari.id", "/account/balance", 0, 0},
+    {"kilo", "https://api.kilo.ai/api/gateway/v1", "https://app.kilo.ai", "/models", 0, 1},
+    {"kiosapi", "https://api.kiosapi.id/v1", "https://kiosapi.id/dashboard/keys", "-", 0, 0},
+    {"linkup", "https://api.linkup.so/v1", "https://app.linkup.so", "/credits/balance", 1, 0},
+    {"llm7", "https://api.llm7.io/v1", "https://llm7.io", "/models", 0, 0},
+    {"llmtr", "https://llmtr.com/v1", "https://llmtr.com", "-", 0, 0},
+    {"logfare", "https://logfare.ai/v1", "https://logfare.ai", "/models", 0, 0},
+    {"longcat", "https://api.longcat.chat/openai/v1", "https://longcat.chat/platform", "/models", 0, 0},
+    {"lucidity", "https://composite.lucidity.sh/v1", "https://composite.lucidity.sh", "/models", 0, 0},
+    {"mistral", "https://api.mistral.ai/v1", "https://console.mistral.ai/api-keys/", "/models", 0, 0},
+    {"modelscope", "https://api-inference.modelscope.cn/v1", "https://modelscope.cn/my/myaccesstoken", "-", 0, 0},
+    {"moondream", "https://api.moondream.ai/v1", "https://moondream.ai/c/cloud/api-keys", "/models", 0, 0},
+    {"nara", "https://router.bynara.id/v1", "https://router.bynara.id", "/models", 0, 0},
+    {"navy", "https://api.navy/v1", "https://api.navy", "/models", 0, 0},
+    {"nvidia", "https://integrate.api.nvidia.com/v1", "https://build.nvidia.com/settings/api-keys", "/models", 0, 0},
+    {"ollama", "https://ollama.com/v1", "https://ollama.com/settings/keys", "/models", 0, 0},
+    {"onomeo", "https://onomeo.com/v1", "https://onomeo.com/dashboard", "/models", 0, 0},
+    {"opencode", "https://opencode.ai/zen/v1", "https://opencode.ai/auth", "/models", 0, 0},
+    {"openrouter", "https://openrouter.ai/api/v1", "https://openrouter.ai/keys", "/models", 0, 0},
+    {"orcarouter", "https://api.orcarouter.ai/v1", "https://www.orcarouter.ai", "/models", 0, 0},
+    {"ovh", "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1", "https://endpoints.ai.cloud.ovh.net", "/models", 0, 1},
+    {"parallel", "https://api.parallel.ai/v1", "https://platform.parallel.ai", "-", 1, 0},
+    {"pinecone", "https://api.pinecone.io", "https://app.pinecone.io", "-", 1, 0},
+    {"plugsky", "https://plugsky.com/v1", "https://plugsky.com/dashboard", "/models", 0, 0},
+    {"pollinations", "https://gen.pollinations.ai/v1", "https://enter.pollinations.ai", "/models", 0, 0},
+    {"qianfan", "https://qianfan.baidubce.com/v2", "https://console.bce.baidu.com/qianfan/overview", "/models", 0, 0},
+    {"radeon", "https://developer.amd.com.cn/radeon/api/v1", "https://developer.amd.com.cn/radeon/tokenfactory", "/models", 0, 0},
+    {"reka", "https://api.reka.ai/v1", "https://platform.reka.ai", "/models", 0, 0},
+    {"requesty", "https://router.requesty.ai/v1", "https://www.requesty.ai", "/models", 0, 0},
+    {"router9", "https://api.router9.com/v1", "https://www.router9.com", "/models", 0, 0},
+    {"routeway", "https://api.routeway.ai/v1", "https://routeway.ai", "/models", 0, 0},
+    {"sail", "https://api.sailresearch.com/v1", "https://app.sailresearch.com", "-", 1, 0},
+    {"sealion", "https://api.sea-lion.ai/v1", "https://sea-lion.ai", "/models", 0, 0},
+    {"septor", "https://api.septorlabs.com/v1", "https://septorlabs.com/dashboard", "/models", 0, 0},
+    {"serpsearch", "https://api.serpsearch.com/api/v1", "https://serpsearch.com", "-", 1, 0},
+    {"siliconflow", "https://api.siliconflow.com/v1", "https://siliconflow.com", "/models", 0, 0},
+    {"simplellm", "https://api.simplellm.eu/v1", "https://app.simplellm.eu", "/rate-limit", 0, 0},
+    {"speechify", "https://api.speechify.ai/v1", "https://platform.speechify.ai", "/workspaces/current/entitlements", 1, 0},
+    {"speka", "https://speka.me/v1", "https://speka.me/dashboard/keys", "/models", 0, 0},
+    {"tavily", "https://api.tavily.com", "https://app.tavily.com", "/usage", 1, 0},
+    {"typhoon", "https://api.opentyphoon.ai/v1", "https://playground.opentyphoon.ai", "/models", 0, 0},
+    {"unorouter", "https://api.unorouter.com/v1", "https://unorouter.com", "/models", 0, 0},
+    {"volcengine", "https://ark.cn-beijing.volces.com/api/v3", "https://console.volcengine.com/ark", "/models", 0, 0},
+    {"waterfall", "https://api.getwaterfall.org/v1", "https://getwaterfall.org", "/models", 0, 0},
+    {"xfyun", "https://spark-api-open.xf-yun.com/v1", "https://console.xfyun.cn", "/models", 0, 0},
+    {"xkiro", "https://api.xkiro.com/v1", "https://xkiro.com", "/usage", 0, 0},
+    {"zhipu", "https://api.z.ai/api/paas/v4", "https://z.ai/manage-apikey/apikey-list", "/models", 0, 0}
 };
 // clang-format on
 static Provider registry[256];
-static char *registry_probes[256];
 static unsigned char registry_owned[256];
 static int nregistry;
 static void provider_defaults(void) {
@@ -2202,6 +2187,15 @@ static const Provider *provider_find(const char *id) {
         if (!strcmp(registry[i].id, id)) return &registry[i];
     return NULL;
 }
+static void provider_free(Provider *rows, unsigned char *owned, int count) {
+    for (int i = 0; i < count; i++)
+        if (owned[i]) {
+            free((void *)rows[i].id);
+            free((void *)rows[i].url);
+            free((void *)rows[i].signup);
+            free((void *)rows[i].probe);
+        }
+}
 static int provider_load(Buf *data) {
     Json j = json(data->p, data->n);
     if (j.bad || !j.n || j.t[0].type != '{') {
@@ -2210,7 +2204,6 @@ static int provider_load(Buf *data) {
     }
     int arr = get(&j, 0, "providers"), ok = 0;
     Provider next[256] = {0};
-    char *probes[256] = {0};
     unsigned char owned[256] = {0};
     memcpy(next, providers, sizeof(providers));
     int count = (int)(sizeof(providers) / sizeof(*providers));
@@ -2218,17 +2211,19 @@ static int provider_load(Buf *data) {
     for (int q = 0; q < j.t[arr].n; q++) {
         int row = at(&j, arr, q);
         char *id = string(&j, get(&j, row, "id")), *url = string(&j, get(&j, row, "url")),
-             *signup = string(&j, get(&j, row, "signup")), *probe = string(&j, get(&j, row, "health_path"));
+             *signup = string(&j, get(&j, row, "signup"));
         int slot = 0;
         while (slot < count && strcmp(next[slot].id, id)) slot++;
         int nt = get(&j, row, "native"), an = get(&j, row, "anonymous"), hp = get(&j, row, "health_path");
+        char *probe = hp >= 0 ? string(&j, hp) : slot < count && next[slot].probe ? strdup(next[slot].probe) : NULL;
         int valid = (nt < 0 || j.t[nt].type == 't' || j.t[nt].type == 'f') &&
                     (an < 0 || j.t[an].type == 't' || j.t[an].type == 'f') && (hp < 0 || j.t[hp].type == '"') &&
                     id[0] && strlen(id) < 96 && strspn(id, "abcdefghijklmnopqrstuvwxyz0123456789_-") == strlen(id) &&
                     !strncmp(url, "https://", 8) && strlen(url) < 2048 && !strpbrk(url, "\r\n ") &&
                     !strncmp(signup, "https://", 8) && strlen(signup) < 2048 && !strpbrk(signup, "\r\n ") &&
-                    strlen(probe) < 256 && (!probe[0] || probe[0] == '/' || !strcmp(probe, "-")) &&
-                    !strstr(probe, "://") && !strpbrk(probe, "\r\n") && slot < 256 && !owned[slot];
+                    (!probe || (strlen(probe) < 256 && (!probe[0] || probe[0] == '/' || !strcmp(probe, "-")) &&
+                                !strstr(probe, "://") && !strpbrk(probe, "\r\n"))) &&
+                    slot < 256 && !owned[slot];
         if (!valid) {
             free(id);
             free(url);
@@ -2237,33 +2232,16 @@ static int provider_load(Buf *data) {
             goto done;
         }
         if (slot == count) count++;
-        next[slot] = (Provider){id, url, signup, boolean(&j, get(&j, row, "native"), 0),
-                                boolean(&j, get(&j, row, "anonymous"), 0)};
-        probes[slot] = get(&j, row, "health_path") >= 0 ? probe : NULL;
-        if (!probes[slot]) free(probe);
+        next[slot] = (Provider){id, url, signup, probe, boolean(&j, nt, 0), boolean(&j, an, 0)};
         owned[slot] = 1;
     }
-    for (int i = 0; i < nregistry; i++)
-        if (registry_owned[i]) {
-            free((void *)registry[i].id);
-            free((void *)registry[i].url);
-            free((void *)registry[i].signup);
-            free(registry_probes[i]);
-        }
+    provider_free(registry, registry_owned, nregistry);
     memcpy(registry, next, sizeof(next));
-    memcpy(registry_probes, probes, sizeof(probes));
     memcpy(registry_owned, owned, sizeof(owned));
     nregistry = count;
     ok = 1;
 done:
-    if (!ok)
-        for (int i = 0; i < count; i++)
-            if (owned[i]) {
-                free((void *)next[i].id);
-                free((void *)next[i].url);
-                free((void *)next[i].signup);
-                free(probes[i]);
-            }
+    if (!ok) provider_free(next, owned, count);
     jfree(&j);
     return ok;
 }
@@ -2288,21 +2266,7 @@ static void provider_refresh(int force) {
 static const char *key_probe(Key *key) {
     if (key->health_path[0]) return key->health_path;
     const Provider *p = provider_find(key->provider);
-    if (p && registry_probes[p - registry]) return registry_probes[p - registry];
-    const char *id = key->provider;
-    if (!strcmp(id, "llmtr") || !strcmp(id, "iteracompute") || !strcmp(id, "kiosapi") || !strcmp(id, "freeai") ||
-        !strcmp(id, "modelscope"))
-        return "-";
-    if (!strcmp(id, "electronhub")) return "/user/me";
-    if (!strcmp(id, "xkiro")) return "/usage";
-    if (!strcmp(id, "simplellm")) return "/rate-limit";
-    if (!strcmp(id, "blockrun")) return "/account";
-    if (!strcmp(id, "kenari")) return "/account/balance";
-    if (!strcmp(id, "inferbase")) return "//api/v1/inference/credits";
-    if (!strcmp(id, "tavily")) return "/usage";
-    if (!strcmp(id, "firecrawl")) return "/team/credit-usage";
-    if (!strcmp(id, "linkup")) return "/credits/balance";
-    if (!strcmp(id, "speechify")) return "/workspaces/current/entitlements";
+    if (p && p->probe) return p->probe;
     return key->native ? "-" : "/models";
 }
 static void check_keys(int force) {
@@ -2318,27 +2282,14 @@ static void check_keys(int force) {
         }
         int health = H_SKIP, http = 0;
         const char *probe = key_probe(&key);
+        char url[4096];
         if (key.anonymous) health = H_ANONYMOUS;
-        else if (probe[0] == '/' && !strstr(probe, "://") && !strpbrk(probe, "\r\n")) {
-            char url[4096];
-            snprintf(url, sizeof(url), "%s", key.url);
-            char *end = key.native ? NULL : strstr(url, "/chat/completions");
-            if (end) *end = 0;
-            if (probe[1] == '/') {
-                char *scheme = strstr(url, "://"), *root = scheme ? strchr(scheme + 3, '/') : NULL;
-                if (root) *root = 0;
-                probe++;
-            }
-            size_t base = strlen(url);
-            snprintf(url + base, sizeof(url) - base, "%s", probe);
+        else if (probe[0] == '/' && !strstr(probe, "://") && !strpbrk(probe, "\r\n") &&
+                 key_url(url, sizeof(url), &key, probe, probe[1] == '/')) {
             Upstream up = {.native = 1, .timeout = 5000};
             int ok = fetch(&key, url, NULL, 0, &up);
             http = (int)up.status;
-            health = !ok || http >= 500           ? H_DOWN
-                     : http == 401                ? H_INVALID
-                     : http == 403                ? H_REJECTED
-                     : http == 429 || http == 402 ? H_LIMITED
-                                                  : H_PUBLIC;
+            health = response_health(ok, http);
             drop(&up.body);
             if (ok && http >= 200 && http < 300) {
                 Key anonymous = key;
@@ -2355,9 +2306,7 @@ static void check_keys(int force) {
         if (keys[i].checked <= started) {
             if (keys[i].health == H_INVALID && health == H_OK)
                 for (int m = 0; m < nm; m++) st(m, i)->cooldown = 0;
-            keys[i].health = health;
-            keys[i].http = http;
-            keys[i].checked = now_s();
+            set_health(&keys[i], health, http);
         }
         UNLOCK();
     }
@@ -2368,8 +2317,8 @@ static void check_keys(int force) {
 static void print_health(void) {
     puts("KEY  PROVIDER  HEALTH  HTTP  CHECKED_AT_UTC_EPOCH");
     for (int i = 0; i < nk; i++)
-        printf("%d  %s  %s  %d  %.0f\n", keys[i].id, keys[i].provider, health_names[keys[i].health], keys[i].http,
-               keys[i].checked);
+        printf("%d  %s  %s  %d  %.0f\n", keys[i].id, keys[i].provider,
+               keys[i].enabled ? health_names[keys[i].health] : "disabled", keys[i].http, keys[i].checked);
 }
 static void provider_list(void) {
     provider_refresh(0);
@@ -2506,37 +2455,6 @@ static void launch_client(const char *client, const char *mode, int extra_count,
     execvp(client, args);
     die("could not launch client; ensure it is installed and the server is running");
 }
-static void discover(const char *provider) {
-    int k = -1;
-    for (int i = 0; i < nk; i++)
-        if (keys[i].enabled && !strcmp(keys[i].provider, provider)) {
-            k = i;
-            break;
-        }
-    if (k < 0) die("add an enabled key for that provider first");
-    char url[2048];
-    snprintf(url, sizeof(url), "%s", keys[k].url);
-    char *suffix = strstr(url, "/chat/completions");
-    if (!suffix) die("cannot derive models URL");
-    snprintf(suffix, sizeof(url) - (size_t)(suffix - url), "/models");
-    Upstream up = {0};
-    if (!fetch(&keys[k], url, NULL, 0, &up) || up.status != 200 || !up.body.p) die("provider model listing failed");
-    Json j = json(up.body.p, up.body.n);
-    if (j.bad) die("provider returned invalid JSON");
-    int a = get(&j, 0, "data");
-    if (a < 0) a = get(&j, 0, "models");
-    if (a < 0 || j.t[a].type != '[') die("provider returned an unsupported model-list shape");
-    for (int i = 0; i < j.t[a].n; i++) {
-        int r = at(&j, a, i);
-        char name[512];
-        fieldstr(&j, r, "id", name, sizeof(name));
-        if (!name[0]) fieldstr(&j, r, "name", name, sizeof(name));
-        if (name[0]) printf("%s\n", name);
-    }
-    jfree(&j);
-    drop(&up.body);
-}
-
 #ifndef BROKIE_CATALOG_URL
 #define BROKIE_CATALOG_URL "https://api.freellmapi.co/v1/latest"
 #endif
@@ -2760,29 +2678,6 @@ static void *automatic_refresh(void *unused) {
     }
     return NULL;
 }
-static void selftest(void) {
-    const char escaped[] = "{\"\\u0061\":1}";
-    Json escaped_json = json(escaped, strlen(escaped));
-    if (escaped_json.bad || fieldnum(&escaped_json, 0, "a", 0) != 1) die("escaped JSON key test failed");
-    jfree(&escaped_json);
-    const char *good[] = {"{}", "[]", "{\"a\":[true,false,null,-1.25e+2]}", "\"\\uD83D\\uDE80\""},
-               *bad[] = {"", "[1,]", "{\"a\" 1}", "{\"a\":}", "01", "true false", "\"\\q\""};
-    for (int i = 0; i < 4; i++) {
-        Json j = json(good[i], strlen(good[i]));
-        if (j.bad) die("JSON positive test failed");
-        jfree(&j);
-    }
-    for (int i = 0; i < 7; i++) {
-        Json j = json(bad[i], strlen(bad[i]));
-        if (!j.bad) die("JSON negative test failed");
-        jfree(&j);
-    }
-    Stats s = {0};
-    if (fabs(speed(&s) - .6) > .00001 || fabs(headroom(.1) - .55) > .00001 ||
-        fabs(weights("smartest", 2) - .55) > .00001)
-        die("scoring test failed");
-    puts("JSON and scoring self-tests passed.");
-}
 int main(int argc, char **argv) {
     const char *home = getenv("HOME");
     snprintf(directory, sizeof(directory), "%s/.brokie", home ? home : ".");
@@ -2794,16 +2689,12 @@ int main(int argc, char **argv) {
     if (p >= argc) {
         puts(
             "brokie [--dir DIR] init | providers | stats | health | check | serve | list [MODE] | mode MODE | key add PROVIDER [BASE_URL] "
-            "[--anonymous] [--native] | model add PROVIDER MODEL | discover PROVIDER | sync | license | claude [MODE] "
-            "| run CLIENT [MODE] | selftest");
+            "[--anonymous] [--native] | model add PROVIDER MODEL | sync | license | claude [MODE] "
+            "| run CLIENT [MODE]");
         return 0;
     }
     const char *cmd = argv[p++];
     curl_global_init(CURL_GLOBAL_DEFAULT);
-    if (!strcmp(cmd, "selftest")) {
-        selftest();
-        return 0;
-    }
     if (!strcmp(cmd, "init")) {
         initialize();
         return 0;
@@ -2850,7 +2741,6 @@ int main(int argc, char **argv) {
         }
         add_key(argv[p + 1], base, anonymous, native);
     } else if (!strcmp(cmd, "model") && p + 2 < argc && !strcmp(argv[p], "add")) add_model(argv[p + 1], argv[p + 2]);
-    else if (!strcmp(cmd, "discover") && p < argc) discover(argv[p]);
     else if (!strcmp(cmd, "sync")) {
         provider_refresh(1);
         if (!sync_catalog(0)) die("catalog sync failed");

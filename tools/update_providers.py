@@ -84,6 +84,18 @@ def build():
     validate(rows)
     return rows
 
+def embed_defaults(rows, verify=False):
+    source = ROOT / 'brokie.c'
+    text = source.read_text(encoding='utf-8')
+    table = 'static const Provider providers[] = {\n' + ',\n'.join(
+        '    {' + ', '.join([json.dumps(p[k]) for k in ('id', 'url', 'signup', 'health_path')] +
+                           [str(int(p['native'])), str(int(p['anonymous']))]) + '}' for p in rows) + '\n};'
+    pattern = r'static const Provider providers\[\] = \{\n.*?\n\};'
+    if verify:
+        assert re.search(pattern, text, re.S)[0] == table, 'Bundled provider defaults differ from providers.json'
+    else:
+        source.write_text(re.sub(pattern, lambda _: table, text, count=1, flags=re.S), encoding='utf-8')
+
 def main():
     args = argparse.ArgumentParser()
     args.add_argument('--verify', action='store_true')
@@ -92,11 +104,13 @@ def main():
     old = json.loads(target.read_text(encoding='utf-8')) if target.exists() else {}
     if options.verify:
         validate(old['providers'])
+        embed_defaults(old['providers'], verify=True)
         documented = set(re.findall(r'^\| `([^`]+)`', (ROOT / 'PROVIDERS.md').read_text(encoding='utf-8'), re.M))
         assert {p['id'] for p in old['providers']} <= documented
         print(f"Validated {len(old['providers'])} provider records")
         return
     rows = build()
+    embed_defaults(rows)
     if rows == old.get('providers'): print('Provider metadata unchanged'); return
     payload = {'schema': 1, 'updated': datetime.now(timezone.utc).date().isoformat(), 'providers': rows}
     target.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')

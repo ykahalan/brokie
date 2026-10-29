@@ -107,12 +107,11 @@ Use an upstream **OpenAI-compatible Chat Completions** endpoint. Examples:
 ./brokie key add openrouter https://openrouter.ai/api/v1
 ./brokie key add local http://127.0.0.1:8080/v1 --anonymous
 ./brokie model add local my-model
-./brokie discover mistral
 ```
 
 For Cloudflare, use provider `cloudflare`, base URL
 `https://api.cloudflare.com/client/v4/accounts/YOUR_ACCOUNT_ID/ai/v1`, and enter only the API token.
-`discover` prints upstream model IDs; it does not automatically enable unknown or paid models.
+Use the provider's model directory to find IDs; `model add` never enables other unknown or paid models.
 Adding another key for the same provider enables key rotation. Disable or relabel keys in JSON.
 
 Edit `config.json` and restart the service. A manually added model looks like:
@@ -140,8 +139,10 @@ IDs must be unique positive integers. A zero quota/context means unknown. Tiers 
 Medium=2, Large=3, Frontier=4. Only mark tools/vision when the upstream model supports them.
 An optional `key_id` binds a model to one credential, which is useful for custom endpoints.
 
-Profiles are simple subsets: `"profile":"coding"` plus
-`"profiles":[{"name":"coding","models":[1,2]}]`. An empty profile selects all enabled models.
+Use each model's `enabled` flag to restrict routing. Named profiles and the `discover`
+command were removed. Before upgrading an old named-profile setup, apply its model selection
+using `enabled` flags and remove the `profile`/`profiles` fields. A nonempty legacy `profile`
+is rejected to avoid silently expanding the set of eligible models.
 
 ## Optional public catalog
 
@@ -154,7 +155,7 @@ pinned Ed25519 public key, and merges chat metadata into local configuration. Th
 currently returns its delayed monthly tier. For an existing premium license, use `brokie license`
 to store it encrypted; the service decides entitlement. No provider keys are sent to the catalog host.
 
-Sync preserves local keys, profiles, disabled entries, and models marked `source:user`. Catalog-owned
+Sync preserves local keys, disabled entries, and models marked `source:user`. Catalog-owned
 models missing from the new feed are removed. To hold a catalog field locally, add an `overrides`
 array listing any of `tools`, `vision`, `context`, `rank`, `rpm`, `rpd`, `tpm`, `tpd` to that model.
 Use `enabled:false` to keep a catalog model disabled across syncs; simply deleting it allows it to return.
@@ -212,8 +213,15 @@ real catalog signature verification, live OpenAI text and Anthropic tool-call re
 Claude Code prompt. GitHub Actions also passed the build and all 25 offline checks on
 Ubuntu and Apple Silicon macOS.
 
-The local suite includes 25 chat checks, 31 native transport/provider/usage checks,
+The local suite includes 25 chat checks, 33 native transport/provider/usage checks,
 and 28 signed-refresh, live replacement, metadata and key-health checks against mock servers.
+Core parser, scoring and health checks live in `tests/test_core.c`, separate from the runtime:
+
+```sh
+sh build.sh tests/test_core.c /tmp/brokie-core-test
+/tmp/brokie-core-test
+```
+
 The optional online catalog test also checks
 that every published platform has a documented registration path.
 
@@ -323,7 +331,8 @@ are generated: probes use read-only model, account or usage endpoints with a fiv
 `healthy` means a real request succeeded, or the keyed probe succeeded while its anonymous
 equivalent was rejected. Public metadata endpoints stay `unverified`. Other statuses are
 `invalid` (401), `rejected` (403), `limited` (402/429), `unreachable`, `anonymous`, and
-`request-only` when no safe probe is known. Unknown/unsupported endpoints stay unverified;
+`request-only` when no safe probe is known. Disabled keys display `disabled`.
+Unknown/unsupported endpoints stay unverified;
 health checks cannot guarantee a model's availability, remaining quota or free eligibility.
 Invalid credentials are excluded from chat routing until a later probe confirms recovery.
 
