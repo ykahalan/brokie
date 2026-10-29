@@ -5,6 +5,9 @@
  * Upstream MIT notices and code provenance: THIRD_PARTY_NOTICES.md and README.md.
  */
 #define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
 #define _CRT_SECURE_NO_WARNINGS
 #include <arpa/inet.h>
 #include <ctype.h>
