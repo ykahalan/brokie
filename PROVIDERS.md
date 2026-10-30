@@ -1,6 +1,6 @@
 # Provider directory
 
-78 providers from FreeLLMAPI's key manager, search registry, and catalog extras; updated 2026-10-29.
+79 providers from FreeLLMAPI's key manager, search registry, and catalog extras; updated 2026-10-30.
 This is a directory of access paths, not a guarantee of ongoing free service. The notes are
 upstream descriptions; confirm current eligibility, limits, and billing at the linked provider.
 
@@ -45,6 +45,7 @@ model/parameter combination. [Native API examples and limits](GUIDE.md#native-ap
 | `huggingface` | [HuggingFace Router](https://huggingface.co/settings/tokens) | `https://router.huggingface.co/v1` | chat | Check current free-plan eligibility. |
 | `inferbase` | [Inferbase](https://inferbase.ai) | `https://api.inferbase.ai/v1` | chat | shared monthly and daily allowance |
 | `iteracompute` | [IteraCompute](https://iteracompute.com/free/) | `https://api.iteracompute.com/v1` | chat | 30M free tokens / month, shared |
+| `jamai` | [JamAI Base](https://cloud.jamaibase.com) | `https://api.jamaibase.com/api/v1` | chat | monthly ELLM allowance |
 | `keenable` | [Keenable](https://app.keenable.ai) | `https://api.keenable.ai/v1` | native | Check current free credits and billing requirements. |
 | `kenari` | [Kenari](https://kenari.id) | `https://kenari.id/v1` | chat | shared daily free chat and images |
 | `kilo` | [Kilo Gateway](https://app.kilo.ai) | `https://api.kilo.ai/api/gateway/v1` | chat | no key needed |

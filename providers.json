@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-10-29",
+  "updated": "2026-10-30",
   "providers": [
     {
       "id": "aclide",
@@ -301,6 +301,16 @@
       "anonymous": false,
       "health_path": "-",
       "note": "30M free tokens / month, shared"
+    },
+    {
+      "id": "jamai",
+      "name": "JamAI Base",
+      "url": "https://api.jamaibase.com/api/v1",
+      "signup": "https://cloud.jamaibase.com",
+      "native": false,
+      "anonymous": false,
+      "health_path": "/models",
+      "note": "monthly ELLM allowance"
     },
     {
       "id": "keenable",

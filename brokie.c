@@ -2123,6 +2123,7 @@ static const Provider providers[] = {
     {"huggingface", "https://router.huggingface.co/v1", "https://huggingface.co/settings/tokens", "/models", 0, 0},
     {"inferbase", "https://api.inferbase.ai/v1", "https://inferbase.ai", "//api/v1/inference/credits", 0, 0},
     {"iteracompute", "https://api.iteracompute.com/v1", "https://iteracompute.com/free/", "-", 0, 0},
+    {"jamai", "https://api.jamaibase.com/api/v1", "https://cloud.jamaibase.com", "/models", 0, 0},
     {"keenable", "https://api.keenable.ai/v1", "https://app.keenable.ai", "-", 1, 1},
     {"kenari", "https://kenari.id/v1", "https://kenari.id", "/account/balance", 0, 0},
     {"kilo", "https://api.kilo.ai/api/gateway/v1", "https://app.kilo.ai", "/models", 0, 1},
