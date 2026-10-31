@@ -1,6 +1,6 @@
 # Provider directory
 
-79 providers from FreeLLMAPI's key manager, search registry, and catalog extras; updated 2026-10-30.
+79 providers from FreeLLMAPI's key manager, search registry, and catalog extras; updated 2026-10-31.
 This is a directory of access paths, not a guarantee of ongoing free service. The notes are
 upstream descriptions; confirm current eligibility, limits, and billing at the linked provider.
 
@@ -25,12 +25,12 @@ model/parameter combination. [Native API examples and limits](GUIDE.md#native-ap
 | `apinex` | [APINex](https://apinex.bond/keys) | `https://api.apinex.bond/v1` | chat | shared daily free chat and decisions |
 | `bai` | [B.AI](https://b.ai) | `https://api.b.ai/v1` | chat | promotional free model |
 | `bazaarlink` | [BazaarLink](https://bazaarlink.ai) | `https://bazaarlink.ai/api/v1` | chat | free key |
-| `beatapi` | [BeatAPI](https://beatapi.io) | `https://api.beatapi.io/v1` | native | JEV decisions; temporary free offer |
+| `beatapi` | [BeatAPI](https://beatapi.io) | `https://api.beatapi.io/v1` | chat | JEV decisions; temporary free offer |
 | `blaze` | [BlazeAPI](https://blazeapi.org/dashboard) | `https://api.blazeapi.org/paid/v1` | chat | daily free tokens; Discord verification |
 | `blockrun` | [BlockRun](https://user.blockrun.ai/dashboard/keys) | `https://api.blockrun.ai/v1` | chat | zero-priced models |
 | `brave` | [Brave Search](https://api-dashboard.search.brave.com) | `https://api.search.brave.com/res/v1` | native | Check current free credits and billing requirements. |
 | `cerebras` | [Cerebras](https://cloud.cerebras.ai) | `https://api.cerebras.ai/v1` | chat | Check current free-plan eligibility. |
-| `clod` | [CLōD](https://newapp.clod.io) | `https://api.clod.io/v1` | chat | shared daily free requests |
+| `clod` | [CLōD](https://app.clod.io) | `https://api.clod.io/v1` | chat | shared daily free requests |
 | `cloudflare` | [Cloudflare Workers AI](https://dash.cloudflare.com) | `https://api.cloudflare.com/client/v4/accounts/YOUR_ACCOUNT_ID/ai/v1` | chat | Check current free-plan eligibility. |
 | `cohere` | [Cohere](https://dashboard.cohere.com/api-keys) | `https://api.cohere.ai/compatibility/v1` | chat | Check current free-plan eligibility. |
 | `dreamprompting` | [DreamPrompting](https://dreamprompting.com) | `https://dreamprompting.com/api/v1` | chat | rolling 24h free tokens and requests |

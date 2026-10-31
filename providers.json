@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-10-30",
+  "updated": "2026-10-31",
   "providers": [
     {
       "id": "aclide",
@@ -107,9 +107,9 @@
       "name": "BeatAPI",
       "url": "https://api.beatapi.io/v1",
       "signup": "https://beatapi.io",
-      "native": true,
+      "native": false,
       "anonymous": false,
-      "health_path": "-",
+      "health_path": "/models",
       "note": "JEV decisions; temporary free offer"
     },
     {
@@ -156,7 +156,7 @@
       "id": "clod",
       "name": "CLōD",
       "url": "https://api.clod.io/v1",
-      "signup": "https://newapp.clod.io",
+      "signup": "https://app.clod.io",
       "native": false,
       "anonymous": false,
       "health_path": "/models",
