@@ -2069,6 +2069,7 @@ static const Provider providers[] = {
     {"mistral", "https://api.mistral.ai/v1", "https://console.mistral.ai/api-keys/", "/models", 0, 0},
     {"modelscope", "https://api-inference.modelscope.cn/v1", "https://modelscope.cn/my/myaccesstoken", "-", 0, 0},
     {"moondream", "https://api.moondream.ai/v1", "https://moondream.ai/c/cloud/api-keys", "/models", 0, 0},
+    {"nabh", "https://api.nabh.cloud/v1", "https://app.nabh.cloud", "/models", 0, 0},
     {"nara", "https://router.bynara.id/v1", "https://router.bynara.id", "/models", 0, 0},
     {"navy", "https://api.navy/v1", "https://api.navy", "/models", 0, 0},
     {"nvidia", "https://integrate.api.nvidia.com/v1", "https://build.nvidia.com/settings/api-keys", "/models", 0, 0},
