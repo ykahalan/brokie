@@ -1,6 +1,5 @@
 """Offline protocol tests. Uses generated fixture keys, never real provider credentials."""
 import contextlib
-import hashlib
 import http.client
 import json
 import os
@@ -11,7 +10,6 @@ import tempfile
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 ROOT = Path(__file__).resolve().parents[1]
 BINARY = Path(os.environ.get('BROKIE_BINARY', ROOT / 'brokie'))
@@ -85,13 +83,8 @@ def request(p, path, body=None, auth=True):
     return result
 
 def vault(folder, secrets=None):
-    password = 'generated-fixture-password-123'
-    salt, iv = os.urandom(16), os.urandom(12)
-    key = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 600000, 32)
-    plain = json.dumps({'token': 'test_gateway', 'keys': secrets or {'1': 'test_provider'}}).encode()
-    cipher = AESGCM(key).encrypt(iv, plain, None)
-    (folder / 'vault.bin').write_bytes(b'MRP1' + salt + iv + cipher[-16:] + cipher[:-16])
-    return password
+    (folder / 'vault.json').write_text(json.dumps({'token': 'test_gateway', 'keys': secrets or {'1': 'test_provider'}}))
+    return 'fixture-password-no-longer-used'
 
 def main():
     upstream = ThreadingHTTPServer(('127.0.0.1', 0), Upstream)
@@ -197,15 +190,16 @@ def main():
         cli('model', 'add', 'local', 'fixture-model')
         cfg = json.loads((Path(tmp) / 'config.json').read_text())
         check('from-scratch setup', len(cfg['keys']) == 1 and len(cfg['models']) == 1)
-        blob = (Path(tmp) / 'vault.bin').read_bytes()
-        check('credentials encrypted on disk', b'fixture-provider-secret' not in blob and 'fixture-provider-secret' not in json.dumps(cfg))
+        keyfile = Path(tmp) / 'vault.json'
+        check('key file owner-only', oct(keyfile.stat().st_mode & 0o777) in ('0o600', '600'))
+        check('credentials not in config', 'fixture-provider-secret' not in json.dumps(cfg))
         child = cli('run', 'python3', 'fastest', '-c', 'import os,json,re;print(json.dumps({"model":os.environ["OPENAI_MODEL"],"base":os.environ["OPENAI_BASE_URL"],"has_key":bool(re.fullmatch(r"brokie_[0-9a-f]{64}",os.environ["OPENAI_API_KEY"]))}))')
         info = json.loads(child.stdout)
         check('OpenAI client launch and argument forwarding', info['model'] == 'auto:fastest' and info['has_key'] and info['base'].endswith('/v1'))
-        original = (Path(tmp) / 'vault.bin').read_bytes()
+        original = keyfile.read_bytes()
         damaged = bytearray(original)
         damaged[-1] ^= 1
-        (Path(tmp) / 'vault.bin').write_bytes(damaged)
+        keyfile.write_bytes(damaged)
         result = cli('list', check_code=False)
         check('tampered vault rejected', result.returncode != 0 and 'damaged vault' in result.stderr)
     print(json.dumps({'passed': len(checked), 'checks': checked}, indent=2))

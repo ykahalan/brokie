@@ -440,86 +440,16 @@ static int hidden_input(const char *prompt, char *out, size_t cap) {
     fputc('\n', stderr);
     return n > 0;
 }
-static char password[512];
-static void unlock_password(int create) {
-    if (password[0]) return;
-    const char *env = getenv("BROKIE_PASSWORD");
-    if (env && *env) {
-        snprintf(password, sizeof(password), "%s", env);
-        unsetenv("BROKIE_PASSWORD");
-        if (strlen(password) < 12) die("BROKIE_PASSWORD must have at least 12 characters");
-        return;
-    }
-    if (!hidden_input(create ? "New vault password (12+ characters): " : "Vault password: ", password,
-                      sizeof(password)))
-        die("password required");
-    if (create) {
-        char again[512];
-        if (strlen(password) < 12 || !hidden_input("Confirm password: ", again, sizeof(again)) ||
-            strcmp(password, again))
-            die("passwords must match and have at least 12 characters");
-        secure_zero(again, sizeof(again));
-    }
-}
+/* Provider keys and the gateway token live in a plain JSON file with
+ * owner-only permissions. The encrypted vault was dropped; restore it
+ * if at-rest protection is wanted. */
 static Buf vault_read(void) {
-    Buf file = read_file("vault.bin"), plain = {0};
-    if (file.n < 4) return file;
-    if (file.n < 48 || memcmp(file.p, "MRP1", 4)) die("invalid vault format; add keys locally on this platform");
-    unlock_password(0);
-    unsigned char key[32];
-    if (!PKCS5_PBKDF2_HMAC(password, (int)strlen(password), (unsigned char *)file.p + 4, 16, 600000, EVP_sha256(), 32,
-                           key))
-        die("key derivation failed");
-    EVP_CIPHER_CTX *c = EVP_CIPHER_CTX_new();
-    int a = 0, b = 0;
-    reserve(&plain, file.n);
-    int ok = c && EVP_DecryptInit_ex(c, EVP_aes_256_gcm(), NULL, NULL, NULL) &&
-             EVP_CIPHER_CTX_ctrl(c, EVP_CTRL_GCM_SET_IVLEN, 12, NULL) &&
-             EVP_DecryptInit_ex(c, NULL, NULL, key, (unsigned char *)file.p + 20) &&
-             EVP_DecryptUpdate(c, (unsigned char *)plain.p, &a, (unsigned char *)file.p + 48, (int)file.n - 48) &&
-             EVP_CIPHER_CTX_ctrl(c, EVP_CTRL_GCM_SET_TAG, 16, file.p + 32) &&
-             EVP_DecryptFinal_ex(c, (unsigned char *)plain.p + a, &b);
-    EVP_CIPHER_CTX_free(c);
-    secure_zero(key, sizeof(key));
-    if (!ok) die("incorrect password or damaged vault");
-    plain.n = a + b;
-    plain.p[plain.n] = 0;
-    drop(&file);
-    return plain;
+    return read_file("vault.json");
 }
 static int vault_write(Buf *plain, int create) {
-    Buf file = {0};
-    unlock_password(create);
-    unsigned char salt[16], iv[12], key[32], tag[16];
-    random_bytes(salt, 16);
-    random_bytes(iv, 12);
-    if (!PKCS5_PBKDF2_HMAC(password, (int)strlen(password), salt, 16, 600000, EVP_sha256(), 32, key)) return 0;
-    put(&file, "MRP1");
-    putn(&file, (char *)salt, 16);
-    putn(&file, (char *)iv, 12);
-    memset(tag, 0, 16);
-    putn(&file, (char *)tag, 16);
-    reserve(&file, plain->n + 16);
-    EVP_CIPHER_CTX *c = EVP_CIPHER_CTX_new();
-    int a = 0, b = 0;
-    int ok = c && EVP_EncryptInit_ex(c, EVP_aes_256_gcm(), NULL, NULL, NULL) &&
-             EVP_CIPHER_CTX_ctrl(c, EVP_CTRL_GCM_SET_IVLEN, 12, NULL) && EVP_EncryptInit_ex(c, NULL, NULL, key, iv) &&
-             EVP_EncryptUpdate(c, (unsigned char *)file.p + 48, &a, (unsigned char *)plain->p, (int)plain->n) &&
-             EVP_EncryptFinal_ex(c, (unsigned char *)file.p + 48 + a, &b) &&
-             EVP_CIPHER_CTX_ctrl(c, EVP_CTRL_GCM_GET_TAG, 16, tag);
-    EVP_CIPHER_CTX_free(c);
-    secure_zero(key, sizeof(key));
-    if (!ok) {
-        drop(&file);
-        return 0;
-    }
-    memcpy(file.p + 32, tag, 16);
-    file.n = 48 + a + b;
-    int okwrite = write_file("vault.bin", file.p, file.n);
-    drop(&file);
-    return okwrite;
+    (void)create;
+    return write_file("vault.json", plain->p, plain->n);
 }
-
 typedef struct {
     int id, enabled, anonymous, native, health, http;
     double checked;
@@ -770,9 +700,9 @@ static void load_config(int need_vault) {
     load_health();
     if (need_vault) {
         Buf vlt = vault_read();
-        if (!vlt.p) die("vault.bin is missing");
+        if (!vlt.p) die("vault.json is missing");
         Json vj = json(vlt.p, vlt.n);
-        if (vj.bad) die("vault is invalid");
+        if (vj.bad) die("damaged vault or invalid key store");
         fieldstr(&vj, 0, "token", auth_token, sizeof(auth_token));
         fieldstr(&vj, 0, "catalog_license", catalog_license, sizeof(catalog_license));
         int ka = get(&vj, 0, "keys");
@@ -2037,8 +1967,10 @@ static void append_config(const char *name, Buf *row) {
     drop(&b);
 }
 static void initialize(void) {
-    Buf existing = read_file("vault.bin");
-    if (existing.p) die("vault already exists; refusing to replace it");
+    Buf existing = read_file("vault.json");
+    if (existing.p) die("key store already exists; refusing to replace it");
+    existing = read_file("vault.bin");
+    if (existing.p) die("old encrypted vault.bin found; re-add keys with 'brokie key add' to create vault.json");
     existing = read_file("config.json");
     if (existing.p) die("config already exists; refusing to replace it");
     if (!private_directory()) die("cannot create private state directory");
@@ -2054,7 +1986,7 @@ static void initialize(void) {
     const char *initial = "{\n  \"port\":31817, \"mode\":\"smartest\", \"timeout_ms\":60000, \"max_attempts\":6, "
                           "\"sticky_seconds\":1800,\n  \"keys\":[], \"models\":[]\n}\n";
     if (!write_file("config.json", initial, strlen(initial))) die("cannot create config");
-    puts("Initialized private configuration and encrypted vault.");
+    puts("Initialized private configuration and key store.");
 }
 static void write_vault_property(const char *name, const char *value, int key_id) {
     Buf v = vault_read();
@@ -2759,7 +2691,6 @@ int main(int argc, char **argv) {
     else die("unknown or incomplete command; run brokie without arguments for usage");
     secure_zero(keys, sizeof(keys));
     secure_zero(auth_token, sizeof(auth_token));
-    secure_zero(password, sizeof(password));
     secure_zero(catalog_license, sizeof(catalog_license));
     free(stats);
     drop(&config);

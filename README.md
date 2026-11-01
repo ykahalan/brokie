@@ -27,8 +27,10 @@ sh build.sh
 ./brokie serve
 ```
 
-`init` asks for a vault password and creates a `brokie_…` gateway key; `key add` asks for your provider key.
-State lives in `~/.brokie`. No FreeLLMAPI installation is needed.
+`init` creates the key store (`vault.json`, owner-only permissions) and a `brokie_…`
+gateway key; `key add` asks for your provider key. No passphrase is required
+(the encrypted vault was replaced by a plain owner-only key file). State lives in
+`~/.brokie`. No FreeLLMAPI installation is needed.
 
 ## Use
 
