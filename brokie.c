@@ -2072,6 +2072,7 @@ static const Provider providers[] = {
     {"nabh", "https://api.nabh.cloud/v1", "https://app.nabh.cloud", "/models", 0, 0},
     {"nara", "https://router.bynara.id/v1", "https://router.bynara.id", "/models", 0, 0},
     {"navy", "https://api.navy/v1", "https://api.navy", "/models", 0, 0},
+    {"novai", "https://aiapi-pro.com/v1", "https://aiapi-pro.com", "-", 1, 0},
     {"nvidia", "https://integrate.api.nvidia.com/v1", "https://build.nvidia.com/settings/api-keys", "/models", 0, 0},
     {"ollama", "https://ollama.com/v1", "https://ollama.com/settings/keys", "/models", 0, 0},
     {"onomeo", "https://onomeo.com/v1", "https://onomeo.com/dashboard", "/models", 0, 0},

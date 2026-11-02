@@ -1,6 +1,6 @@
 # Provider directory
 
-80 providers from FreeLLMAPI's key manager, search registry, and catalog extras; updated 2026-11-01.
+81 providers from FreeLLMAPI's key manager, search registry, and catalog extras; updated 2026-11-02.
 This is a directory of access paths, not a guarantee of ongoing free service. The notes are
 upstream descriptions; confirm current eligibility, limits, and billing at the linked provider.
 
@@ -38,7 +38,7 @@ model/parameter combination. [Native API examples and limits](GUIDE.md#native-ap
 | `exa` | [Exa](https://dashboard.exa.ai/api-keys) | `https://api.exa.ai` | native | Check current free credits and billing requirements. |
 | `experiential` | [Experiential Labs](https://platform.experientiallabs.ai) | `https://api.experientiallabs.ai/v1` | chat | shared monthly credits |
 | `firecrawl` | [Firecrawl](https://www.firecrawl.dev/app/api-keys) | `https://api.firecrawl.dev/v2` | native | Check current free credits and billing requirements. |
-| `freeai` | [Free.ai](https://free.ai/account/#api-keys) | `https://api.free.ai` | native | shared daily free TTS tokens |
+| `freeai` | [Free.ai](https://free.ai/account/#api-keys) | `https://api.free.ai` | native | shared free speech / transcription quota |
 | `gizmo` | [Gizmo](https://gizmoplatforms.com/developers) | `https://api.gizmoplatforms.com/api/v1` | chat | monthly free-model requests |
 | `google` | [Google AI Studio](https://aistudio.google.com/apikey) | `https://generativelanguage.googleapis.com/v1beta/openai` | chat | Check current free-plan eligibility. |
 | `groq` | [Groq](https://console.groq.com/keys) | `https://api.groq.com/openai/v1` | chat | Check current free-plan eligibility. |
@@ -62,6 +62,7 @@ model/parameter combination. [Native API examples and limits](GUIDE.md#native-ap
 | `nabh` | [nabh.cloud](https://app.nabh.cloud) | `https://api.nabh.cloud/v1` | chat | 50 shared monthly credits |
 | `nara` | [NaraRouter](https://router.bynara.id) | `https://router.bynara.id/v1` | chat | free key |
 | `navy` | [NavyAI](https://api.navy) | `https://api.navy/v1` | chat | free key |
+| `novai` | [NovAI](https://aiapi-pro.com) | `https://aiapi-pro.com/v1` | native | daily free video quota |
 | `nvidia` | [NVIDIA NIM](https://build.nvidia.com/settings/api-keys) | `https://integrate.api.nvidia.com/v1` | chat | Check current free-plan eligibility. |
 | `ollama` | [Ollama Cloud](https://ollama.com/settings/keys) | `https://ollama.com/v1` | chat | Check current free-plan eligibility. |
 | `onomeo` | [onomeo](https://onomeo.com/dashboard) | `https://onomeo.com/v1` | chat | 30 free calls / 5 hours, shared |

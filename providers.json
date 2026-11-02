@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-11-01",
+  "updated": "2026-11-02",
   "providers": [
     {
       "id": "aclide",
@@ -240,7 +240,7 @@
       "native": true,
       "anonymous": false,
       "health_path": "-",
-      "note": "shared daily free TTS tokens"
+      "note": "shared free speech / transcription quota"
     },
     {
       "id": "gizmo",
@@ -471,6 +471,16 @@
       "anonymous": false,
       "health_path": "/models",
       "note": "free key"
+    },
+    {
+      "id": "novai",
+      "name": "NovAI",
+      "url": "https://aiapi-pro.com/v1",
+      "signup": "https://aiapi-pro.com",
+      "native": true,
+      "anonymous": false,
+      "health_path": "-",
+      "note": "daily free video quota"
     },
     {
       "id": "nvidia",
