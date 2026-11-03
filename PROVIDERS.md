@@ -1,6 +1,6 @@
 # Provider directory
 
-81 providers from FreeLLMAPI's key manager, search registry, and catalog extras; updated 2026-11-02.
+81 providers from FreeLLMAPI's key manager, search registry, and catalog extras; updated 2026-11-03.
 This is a directory of access paths, not a guarantee of ongoing free service. The notes are
 upstream descriptions; confirm current eligibility, limits, and billing at the linked provider.
 
@@ -62,7 +62,7 @@ model/parameter combination. [Native API examples and limits](GUIDE.md#native-ap
 | `nabh` | [nabh.cloud](https://app.nabh.cloud) | `https://api.nabh.cloud/v1` | chat | 50 shared monthly credits |
 | `nara` | [NaraRouter](https://router.bynara.id) | `https://router.bynara.id/v1` | chat | free key |
 | `navy` | [NavyAI](https://api.navy) | `https://api.navy/v1` | chat | free key |
-| `novai` | [NovAI](https://aiapi-pro.com) | `https://aiapi-pro.com/v1` | native | daily free video quota |
+| `novai` | [NovAI](https://aiapi-pro.com) | `https://aiapi-pro.com/v1` | chat | daily free chat + video quota |
 | `nvidia` | [NVIDIA NIM](https://build.nvidia.com/settings/api-keys) | `https://integrate.api.nvidia.com/v1` | chat | Check current free-plan eligibility. |
 | `ollama` | [Ollama Cloud](https://ollama.com/settings/keys) | `https://ollama.com/v1` | chat | Check current free-plan eligibility. |
 | `onomeo` | [onomeo](https://onomeo.com/dashboard) | `https://onomeo.com/v1` | chat | 30 free calls / 5 hours, shared |

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-11-02",
+  "updated": "2026-11-03",
   "providers": [
     {
       "id": "aclide",
@@ -477,10 +477,10 @@
       "name": "NovAI",
       "url": "https://aiapi-pro.com/v1",
       "signup": "https://aiapi-pro.com",
-      "native": true,
+      "native": false,
       "anonymous": false,
       "health_path": "-",
-      "note": "daily free video quota"
+      "note": "daily free chat + video quota"
     },
     {
       "id": "nvidia",
