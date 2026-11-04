@@ -2049,6 +2049,7 @@ static const Provider providers[] = {
     {"experiential", "https://api.experientiallabs.ai/v1", "https://platform.experientiallabs.ai", "/models", 0, 0},
     {"firecrawl", "https://api.firecrawl.dev/v2", "https://www.firecrawl.dev/app/api-keys", "/team/credit-usage", 1, 0},
     {"freeai", "https://api.free.ai", "https://free.ai/account/#api-keys", "-", 1, 0},
+    {"freeinference", "https://freeinference.org/v1", "https://freeinference.org", "-", 0, 0},
     {"gizmo", "https://api.gizmoplatforms.com/api/v1", "https://gizmoplatforms.com/developers", "/models", 0, 0},
     {"google", "https://generativelanguage.googleapis.com/v1beta/openai", "https://aistudio.google.com/apikey", "/models", 0, 0},
     {"groq", "https://api.groq.com/openai/v1", "https://console.groq.com/keys", "/models", 0, 0},

@@ -1,6 +1,6 @@
 # Provider directory
 
-81 providers from FreeLLMAPI's key manager, search registry, and catalog extras; updated 2026-11-03.
+82 providers from FreeLLMAPI's key manager, search registry, and catalog extras; updated 2026-11-04.
 This is a directory of access paths, not a guarantee of ongoing free service. The notes are
 upstream descriptions; confirm current eligibility, limits, and billing at the linked provider.
 
@@ -39,6 +39,7 @@ model/parameter combination. [Native API examples and limits](GUIDE.md#native-ap
 | `experiential` | [Experiential Labs](https://platform.experientiallabs.ai) | `https://api.experientiallabs.ai/v1` | chat | shared monthly credits |
 | `firecrawl` | [Firecrawl](https://www.firecrawl.dev/app/api-keys) | `https://api.firecrawl.dev/v2` | native | Check current free credits and billing requirements. |
 | `freeai` | [Free.ai](https://free.ai/account/#api-keys) | `https://api.free.ai` | native | shared free speech / transcription quota |
+| `freeinference` | [FreeInference](https://freeinference.org) | `https://freeinference.org/v1` | chat | research; requests logged |
 | `gizmo` | [Gizmo](https://gizmoplatforms.com/developers) | `https://api.gizmoplatforms.com/api/v1` | chat | monthly free-model requests |
 | `google` | [Google AI Studio](https://aistudio.google.com/apikey) | `https://generativelanguage.googleapis.com/v1beta/openai` | chat | Check current free-plan eligibility. |
 | `groq` | [Groq](https://console.groq.com/keys) | `https://api.groq.com/openai/v1` | chat | Check current free-plan eligibility. |

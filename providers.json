@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-11-03",
+  "updated": "2026-11-04",
   "providers": [
     {
       "id": "aclide",
@@ -241,6 +241,16 @@
       "anonymous": false,
       "health_path": "-",
       "note": "shared free speech / transcription quota"
+    },
+    {
+      "id": "freeinference",
+      "name": "FreeInference",
+      "url": "https://freeinference.org/v1",
+      "signup": "https://freeinference.org",
+      "native": false,
+      "anonymous": false,
+      "health_path": "-",
+      "note": "research; requests logged"
     },
     {
       "id": "gizmo",
