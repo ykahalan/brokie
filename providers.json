@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-11-04",
+  "updated": "2026-11-06",
   "providers": [
     {
       "id": "aclide",
@@ -251,6 +251,16 @@
       "anonymous": false,
       "health_path": "-",
       "note": "research; requests logged"
+    },
+    {
+      "id": "freemodel",
+      "name": "FreeModel",
+      "url": "https://freemodel.in/v1",
+      "signup": "https://freemodel.in/dashboard",
+      "native": false,
+      "anonymous": false,
+      "health_path": "-",
+      "note": "monthly allowance; Telegram verification"
     },
     {
       "id": "gizmo",
