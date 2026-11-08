@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-11-06",
+  "updated": "2026-11-08",
   "providers": [
     {
       "id": "aclide",
@@ -781,6 +781,16 @@
       "anonymous": false,
       "health_path": "/models",
       "note": "free key"
+    },
+    {
+      "id": "varosity",
+      "name": "Varosity",
+      "url": "https://varosity.ai/api",
+      "signup": "https://varosity.ai/app/keys/api-keys",
+      "native": true,
+      "anonymous": false,
+      "health_path": "-",
+      "note": "shared daily media credits"
     },
     {
       "id": "volcengine",

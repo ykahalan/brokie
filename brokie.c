@@ -2103,6 +2103,7 @@ static const Provider providers[] = {
     {"tavily", "https://api.tavily.com", "https://app.tavily.com", "/usage", 1, 0},
     {"typhoon", "https://api.opentyphoon.ai/v1", "https://playground.opentyphoon.ai", "/models", 0, 0},
     {"unorouter", "https://api.unorouter.com/v1", "https://unorouter.com", "/models", 0, 0},
+    {"varosity", "https://varosity.ai/api", "https://varosity.ai/app/keys/api-keys", "-", 1, 0},
     {"volcengine", "https://ark.cn-beijing.volces.com/api/v3", "https://console.volcengine.com/ark", "/models", 0, 0},
     {"waterfall", "https://api.getwaterfall.org/v1", "https://getwaterfall.org", "/models", 0, 0},
     {"xfyun", "https://spark-api-open.xf-yun.com/v1", "https://console.xfyun.cn", "/models", 0, 0},

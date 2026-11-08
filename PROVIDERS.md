@@ -1,6 +1,6 @@
 # Provider directory
 
-83 providers from FreeLLMAPI's key manager, search registry, and catalog extras; updated 2026-11-06.
+84 providers from FreeLLMAPI's key manager, search registry, and catalog extras; updated 2026-11-08.
 This is a directory of access paths, not a guarantee of ongoing free service. The notes are
 upstream descriptions; confirm current eligibility, limits, and billing at the linked provider.
 
@@ -93,6 +93,7 @@ model/parameter combination. [Native API examples and limits](GUIDE.md#native-ap
 | `tavily` | [Tavily](https://app.tavily.com) | `https://api.tavily.com` | native | Check current free credits and billing requirements. |
 | `typhoon` | [Typhoon](https://playground.opentyphoon.ai) | `https://api.opentyphoon.ai/v1` | chat | free research API |
 | `unorouter` | [UnoRouter](https://unorouter.com) | `https://api.unorouter.com/v1` | chat | free key |
+| `varosity` | [Varosity](https://varosity.ai/app/keys/api-keys) | `https://varosity.ai/api` | native | shared daily media credits |
 | `volcengine` | [Volcengine Ark](https://console.volcengine.com/ark) | `https://ark.cn-beijing.volces.com/api/v3` | chat | free daily, needs cn real-name |
 | `waterfall` | [Waterfall](https://getwaterfall.org) | `https://api.getwaterfall.org/v1` | chat | community free models |
 | `xfyun` | [iFlytek Spark](https://console.xfyun.cn) | `https://spark-api-open.xf-yun.com/v1` | chat | free Lite, needs cn real-name |
